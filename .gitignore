@@ -1,6 +1,7 @@
 .vscode/
-cache
-build
-data
-oj-client/.qtcreator
+cache/
+build/
+data/
+oj-client/.qtcreator/
+
 
