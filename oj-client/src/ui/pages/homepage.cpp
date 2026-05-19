@@ -5,6 +5,7 @@
 #include <QLabel>
 #include <QListWidget>
 #include <QListWidgetItem>
+#include <QPushButton>
 #include <QUrl>
 #include <QVBoxLayout>
 
@@ -36,24 +37,56 @@ HomePage::HomePage(QWidget *parent)
     auto *bottomLayout = new QHBoxLayout();
     bottomLayout->setSpacing(18);
 
-    auto *leftFrame = new QFrame(this);
-    leftFrame->setObjectName("homeLeftFrame");
-    auto *leftLayout = new QVBoxLayout(leftFrame);
+    m_toolsFrame = new QFrame(this);
+    m_toolsFrame->setObjectName("homeLeftFrame");
+    auto *leftLayout = new QVBoxLayout(m_toolsFrame);
     leftLayout->setContentsMargins(20, 18, 20, 18);
     leftLayout->setSpacing(12);
 
-    auto *leftTitleLabel = new QLabel("Tools", leftFrame);
-    leftTitleLabel->setObjectName("homeSectionLabel");
+    m_toolsToggleButton = new QPushButton(m_toolsFrame);
+    m_toolsToggleButton->setObjectName("homeToolsToggleButton");
 
-    m_toolsListWidget = new QListWidget(leftFrame);
-    m_toolsListWidget->setObjectName("homeToolsList");
-    auto *favoritesItem = new QListWidgetItem("Open Favorites", m_toolsListWidget);
-    favoritesItem->setData(Qt::UserRole, "favorites");
-    auto *logoutItem = new QListWidgetItem("Log Out", m_toolsListWidget);
-    logoutItem->setData(Qt::UserRole, "logout");
+    m_toolsPanel = new QWidget(m_toolsFrame);
+    auto *toolsPanelLayout = new QVBoxLayout(m_toolsPanel);
+    toolsPanelLayout->setContentsMargins(0, 0, 0, 0);
+    toolsPanelLayout->setSpacing(10);
 
-    leftLayout->addWidget(leftTitleLabel);
-    leftLayout->addWidget(m_toolsListWidget);
+    m_favoritesButton = new QPushButton("Open Favorites", m_toolsPanel);
+    m_favoritesButton->setObjectName("homeToolButton");
+    m_storageButton = new QPushButton("Storage", m_toolsPanel);
+    m_storageButton->setObjectName("homeToolButton");
+    m_logoutButton = new QPushButton("Log Out", m_toolsPanel);
+    m_logoutButton->setObjectName("homeToolButton");
+
+    m_collapsedToolsPanel = new QWidget(m_toolsFrame);
+    m_collapsedToolsPanel->setObjectName("homeCollapsedToolsPanel");
+    auto *collapsedLayout = new QVBoxLayout(m_collapsedToolsPanel);
+    collapsedLayout->setContentsMargins(0, 0, 0, 0);
+    collapsedLayout->setSpacing(10);
+
+    m_collapsedFavoritesButton = new QPushButton("F", m_collapsedToolsPanel);
+    m_collapsedFavoritesButton->setObjectName("homeToolIconButton");
+    m_collapsedFavoritesButton->setToolTip("Open Favorites");
+    m_collapsedStorageButton = new QPushButton("S", m_collapsedToolsPanel);
+    m_collapsedStorageButton->setObjectName("homeToolIconButton");
+    m_collapsedStorageButton->setToolTip("Storage");
+    m_collapsedLogoutButton = new QPushButton("L", m_collapsedToolsPanel);
+    m_collapsedLogoutButton->setObjectName("homeToolIconButton");
+    m_collapsedLogoutButton->setToolTip("Log Out");
+
+    collapsedLayout->addWidget(m_collapsedFavoritesButton);
+    collapsedLayout->addWidget(m_collapsedStorageButton);
+    collapsedLayout->addWidget(m_collapsedLogoutButton);
+    collapsedLayout->addStretch();
+
+    toolsPanelLayout->addWidget(m_favoritesButton);
+    toolsPanelLayout->addWidget(m_storageButton);
+    toolsPanelLayout->addWidget(m_logoutButton);
+    toolsPanelLayout->addStretch();
+
+    leftLayout->addWidget(m_toolsToggleButton);
+    leftLayout->addWidget(m_toolsPanel);
+    leftLayout->addWidget(m_collapsedToolsPanel);
     leftLayout->addStretch();
    
     m_contentCard = new QFrame(this);
@@ -88,7 +121,7 @@ HomePage::HomePage(QWidget *parent)
     rightLayout->addWidget(rightTitleLabel);
     rightLayout->addWidget(m_reminderListWidget, 1);
 
-    bottomLayout->addWidget(leftFrame, 1);
+    bottomLayout->addWidget(m_toolsFrame, 1);
     bottomLayout->addWidget(m_contentCard, 2);
     bottomLayout->addWidget(rightFrame, 2);
 
@@ -121,14 +154,41 @@ HomePage::HomePage(QWidget *parent)
         "  font-weight: 600;"
         "  color: #2f3a33;"
         "}"
-        "#homeClassList {"
+        "#homeToolsToggleButton {"
         "  background: transparent;"
         "  border: none;"
-        "  border-radius: 0px;"
         "  padding: 0px;"
-        "  outline: none;"
+        "  text-align: left;"
+        "  font-size: 16px;"
+        "  font-weight: 600;"
+        "  color: #2f3a33;"
         "}"
-        "#homeToolsList {"
+        "#homeToolsToggleButton:hover {"
+        "  color: #12343b;"
+        "}"
+        "#homeToolButton {"
+        "  padding: 10px 12px;"
+        "  border: none;"
+        "  border-radius: 10px;"
+        "  background: transparent;"
+        "  color: #2f3a33;"
+        "  text-align: left;"
+        "}"
+        "#homeToolButton:hover, #homeToolIconButton:hover {"
+        "  background: #eef4ef;"
+        "}"
+        "#homeToolIconButton {"
+        "  min-width: 36px;"
+        "  max-width: 36px;"
+        "  min-height: 36px;"
+        "  max-height: 36px;"
+        "  border: none;"
+        "  border-radius: 10px;"
+        "  background: transparent;"
+        "  color: #2f3a33;"
+        "  font-weight: 600;"
+        "}"
+        "#homeClassList {"
         "  background: transparent;"
         "  border: none;"
         "  border-radius: 0px;"
@@ -142,19 +202,21 @@ HomePage::HomePage(QWidget *parent)
         "  padding: 0px;"
         "  outline: none;"
         "}"
-        "#homeClassList::item, #homeToolsList::item, #homeReminderList::item {"
+        "#homeClassList::item, #homeReminderList::item {"
         "  padding: 12px 4px;"
         "  border-radius: 8px;"
         "  margin: 2px 0px;"
         "}"
-        "#homeClassList::item:selected, #homeToolsList::item:selected, #homeReminderList::item:selected {"
+        "#homeClassList::item:selected, #homeReminderList::item:selected {"
         "  background: #dcefea;"
         "  color: #12343b;"
         "}"
-        "#homeClassList::item:hover, #homeToolsList::item:hover, #homeReminderList::item:hover {"
+        "#homeClassList::item:hover, #homeReminderList::item:hover {"
         "  background: #eef4ef;"
         "}"
     );
+
+    setToolsExpanded(true);
 
     connect(
         m_classListWidget,
@@ -165,17 +227,18 @@ HomePage::HomePage(QWidget *parent)
                 item->text(),
                 item->data(Qt::UserRole).toString());
         });
+    connect(m_favoritesButton, &QPushButton::clicked, this, &HomePage::favoritesRequested);
+    connect(m_storageButton, &QPushButton::clicked, this, &HomePage::storageRequested);
+    connect(m_logoutButton, &QPushButton::clicked, this, &HomePage::logoutRequested);
+    connect(m_collapsedFavoritesButton, &QPushButton::clicked, this, &HomePage::favoritesRequested);
+    connect(m_collapsedStorageButton, &QPushButton::clicked, this, &HomePage::storageRequested);
+    connect(m_collapsedLogoutButton, &QPushButton::clicked, this, &HomePage::logoutRequested);
     connect(
-        m_toolsListWidget,
-        &QListWidget::itemClicked,
+        m_toolsToggleButton,
+        &QPushButton::clicked,
         this,
-        [this](QListWidgetItem *item) {
-            const QString action = item->data(Qt::UserRole).toString();
-            if (action == "favorites") {
-                emit favoritesRequested();
-            } else if (action == "logout") {
-                emit logoutRequested();
-            }
+        [this]() {
+            setToolsExpanded(!m_toolsExpanded);
         });
     connect(
         m_reminderListWidget,
@@ -189,6 +252,32 @@ HomePage::HomePage(QWidget *parent)
                 emit reminderSelected(item->text(), contestUrl);
             }
         });
+}
+
+void HomePage::setToolsExpanded(bool expanded)
+{
+    m_toolsExpanded = expanded;
+    if (m_toolsFrame != nullptr) {
+        m_toolsFrame->setMinimumWidth(expanded ? 0 : 84);
+        m_toolsFrame->setMaximumWidth(expanded ? QWIDGETSIZE_MAX : 84);
+    }
+    if (m_toolsPanel != nullptr) {
+        m_toolsPanel->setVisible(expanded);
+    }
+    if (m_collapsedToolsPanel != nullptr) {
+        m_collapsedToolsPanel->setVisible(!expanded);
+    }
+    const QList<QPushButton *> iconButtons = {m_collapsedFavoritesButton,
+                                              m_collapsedStorageButton,
+                                              m_collapsedLogoutButton};
+    for (QPushButton *button : iconButtons) {
+        if (button != nullptr) {
+            button->setVisible(!expanded);
+        }
+    }
+    if (m_toolsToggleButton != nullptr) {
+        m_toolsToggleButton->setText(expanded ? "Tools v" : ">");
+    }
 }
 
 void HomePage::showLoggingIn()

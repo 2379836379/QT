@@ -1,5 +1,4 @@
 ### todo:
-login/Email Verification  
 contest reminder  
 AI   
 local test  
@@ -11,4 +10,10 @@ cache
 favorite  
 basic ui  
 due list  
+login/Email Verification   
+Go server on CLab Ubuntu(OJ-server)
+
+
+
+
 

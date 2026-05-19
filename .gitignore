@@ -3,5 +3,13 @@ cache/
 build/
 data/
 oj-client/.qtcreator/
+oj-client/build/
+oj-client/cache/
+oj-client/data/
+oj-server/server.exe
+
+
+
+
 
 

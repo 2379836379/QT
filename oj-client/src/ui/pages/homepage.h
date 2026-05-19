@@ -10,6 +10,7 @@ class QListWidget;
 class QListWidgetItem;
 class QPushButton;
 class QFrame;
+class QWidget;
 
 class HomePage : public QWidget
 {
@@ -30,12 +31,25 @@ public:
 signals:
     void classSelected(const QString &name, const QString &url);
     void favoritesRequested();
+    void storageRequested();
     void logoutRequested();
     void reminderSelected(const QString &title, const QString &url);
 
 private:
+    void setToolsExpanded(bool expanded);
+
+    QFrame *m_toolsFrame = nullptr;
     QFrame *m_contentCard = nullptr;
     QListWidget *m_classListWidget = nullptr;
-    QListWidget *m_toolsListWidget = nullptr;
+    QPushButton *m_toolsToggleButton = nullptr;
+    QWidget *m_toolsPanel = nullptr;
+    QWidget *m_collapsedToolsPanel = nullptr;
+    QPushButton *m_favoritesButton = nullptr;
+    QPushButton *m_storageButton = nullptr;
+    QPushButton *m_logoutButton = nullptr;
+    QPushButton *m_collapsedFavoritesButton = nullptr;
+    QPushButton *m_collapsedStorageButton = nullptr;
+    QPushButton *m_collapsedLogoutButton = nullptr;
     QListWidget *m_reminderListWidget = nullptr;
+    bool m_toolsExpanded = true;
 };

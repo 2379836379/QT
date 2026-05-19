@@ -23,6 +23,8 @@ qt_add_executable(oj
     src/ui/pages/problempage.h
     src/ui/pages/favoritepage.cpp
     src/ui/pages/favoritepage.h
+    src/ui/pages/storagepage.cpp
+    src/ui/pages/storagepage.h
     src/network/cookiestore.cpp
     src/network/cookiestore.h
     src/network/openjudgeclient.cpp
@@ -65,6 +67,8 @@ qt_add_executable(oj
     src/repository/cache/problemcacherepository.h
     src/repository/favorite/favoriteproblemrepository.cpp
     src/repository/favorite/favoriteproblemrepository.h
+    src/repository/login/logincacherepository.cpp
+    src/repository/login/logincacherepository.h
     src/service/browse/homeservice.cpp
     src/service/browse/homeservice.h
     src/service/browse/classservice.cpp
@@ -73,6 +77,8 @@ qt_add_executable(oj
     src/service/browse/contestservice.h
     src/service/browse/problemservice.cpp
     src/service/browse/problemservice.h
+    src/service/app/applicationsizeservice.cpp
+    src/service/app/applicationsizeservice.h
     src/service/cache/cacheservice.cpp
     src/service/cache/cacheservice.h
     src/service/reminder/reminderservice.cpp
@@ -83,6 +89,10 @@ qt_add_executable(oj
     src/service/submit/submitservice.h
     src/service/favorite/favoriteproblemservice.cpp
     src/service/favorite/favoriteproblemservice.h
+    src/service/login/emailverifyservice.cpp
+    src/service/login/emailverifyservice.h
+    src/service/login/logincacheservice.cpp
+    src/service/login/logincacheservice.h
     src/service/login/loginservice.cpp
     src/service/login/loginservice.h
 )
@@ -104,6 +114,19 @@ if (WIN32)
     get_target_property(QT_QMAKE_EXECUTABLE Qt6::qmake IMPORTED_LOCATION)
     get_filename_component(QT_BIN_DIR "${QT_QMAKE_EXECUTABLE}" DIRECTORY)
     find_program(WINDEPLOYQT_EXECUTABLE windeployqt HINTS "${QT_BIN_DIR}")
+    get_filename_component(CXX_COMPILER_DIR "${CMAKE_CXX_COMPILER}" DIRECTORY)
+
+    foreach(runtime_dll
+            libgcc_s_seh-1.dll
+            libstdc++-6.dll
+            libwinpthread-1.dll)
+        add_custom_command(TARGET oj POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                "${CXX_COMPILER_DIR}/${runtime_dll}"
+                "$<TARGET_FILE_DIR:oj>/${runtime_dll}"
+            COMMENT "Copying ${runtime_dll} next to oj.exe"
+        )
+    endforeach()
 
     if (WINDEPLOYQT_EXECUTABLE)
         add_custom_command(TARGET oj POST_BUILD

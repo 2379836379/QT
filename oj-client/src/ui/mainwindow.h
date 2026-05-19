@@ -21,9 +21,14 @@ class ContestCacheRepository;
 class ProblemRepository;
 class ProblemCacheRepository;
 class FavoriteProblemRepository;
+class LoginCacheRepository;
 class ResultRepository;
 class SubmitRepository;
+class CacheService;
 class LoginService;
+class LoginCacheService;
+class EmailVerifyService;
+class ApplicationSizeService;
 class HomeService;
 class ClassService;
 class ContestService;
@@ -38,6 +43,7 @@ class ClassPage;
 class ContestPage;
 class ProblemPage;
 class FavoritePage;
+class StoragePage;
 class QWidget;
 
 class MainWindow : public QMainWindow
@@ -59,6 +65,8 @@ private:
                          const QString &problemTitle,
                          bool preferFavoriteCache);
     void saveCurrentProblemToFavorites();
+    bool requiresEmailVerification(const QString &email) const;
+    void applyLoginCacheState(const QString &email);
 
 private:
     Ui::MainWindow *ui;
@@ -72,9 +80,14 @@ private:
     ContestCacheRepository *m_contestCacheRepository = nullptr;
     ProblemRepository *m_problemRepository = nullptr;
     ProblemCacheRepository *m_problemCacheRepository = nullptr;
+    LoginCacheRepository *m_loginCacheRepository = nullptr;
     ResultRepository *m_resultRepository = nullptr;
     SubmitRepository *m_submitRepository = nullptr;
+    CacheService *m_cacheService = nullptr;
     LoginService *m_loginService = nullptr;
+    LoginCacheService *m_loginCacheService = nullptr;
+    EmailVerifyService *m_emailVerifyService = nullptr;
+    ApplicationSizeService *m_applicationSizeService = nullptr;
     HomeService *m_homeService = nullptr;
     ClassService *m_classService = nullptr;
     ContestService *m_contestService = nullptr;
@@ -91,9 +104,13 @@ private:
     ContestPage *m_contestPage = nullptr;
     ProblemPage *m_problemPage = nullptr;
     FavoritePage *m_favoritePage = nullptr;
+    StoragePage *m_storagePage = nullptr;
     QVector<int> m_navigationHistory;
     ProblemPageInfo m_currentProblemInfo;
     bool m_hasCurrentProblem = false;
+    QString m_verifiedEmail;
+    QString m_pendingLoginEmail;
+    QString m_pendingLoginPassword;
 };
 
 #endif // MAINWINDOW_H

@@ -9,6 +9,7 @@
 #include "repository/cache/homecacherepository.h"
 #include "repository/cache/problemcacherepository.h"
 #include "repository/favorite/favoriteproblemrepository.h"
+#include "repository/login/logincacherepository.h"
 #include "repository/submit/classrepository.h"
 #include "repository/submit/contestrepository.h"
 #include "repository/submit/homerepository.h"
@@ -19,8 +20,12 @@
 #include "service/browse/contestservice.h"
 #include "service/browse/homeservice.h"
 #include "service/browse/problemservice.h"
+#include "service/cache/cacheservice.h"
 #include "service/favorite/favoriteproblemservice.h"
+#include "service/app/applicationsizeservice.h"
 #include "service/login/loginservice.h"
+#include "service/login/emailverifyservice.h"
+#include "service/login/logincacheservice.h"
 #include "service/reminder/reminderservice.h"
 #include "service/submit/resultservice.h"
 #include "service/submit/submitservice.h"
@@ -30,6 +35,7 @@
 #include "ui/pages/homepage.h"
 #include "ui/pages/loginpage.h"
 #include "ui/pages/problempage.h"
+#include "ui/pages/storagepage.h"
 
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -53,11 +59,20 @@ MainWindow::MainWindow(QWidget *parent)
     m_contestCacheRepository = new ContestCacheRepository();
     m_problemRepository = new ProblemRepository(m_client, this);
     m_problemCacheRepository = new ProblemCacheRepository();
+    m_loginCacheRepository = new LoginCacheRepository();
     m_resultRepository = new ResultRepository(m_client, this);
     m_submitRepository = new SubmitRepository(m_client, this);
     m_reminderClassRepository = new ClassRepository(m_client, this);
 
+    m_cacheService = new CacheService(m_homeCacheRepository,
+                                      m_classCacheRepository,
+                                      m_contestCacheRepository,
+                                      m_problemCacheRepository,
+                                      this);
     m_loginService = new LoginService(m_client, this);
+    m_loginCacheService = new LoginCacheService(m_loginCacheRepository, this);
+    m_emailVerifyService = new EmailVerifyService(this);
+    m_applicationSizeService = new ApplicationSizeService(this);
     m_homeService = new HomeService(m_homeRepository, m_homeCacheRepository, this);
     m_classService = new ClassService(
         m_classRepository, m_classCacheRepository, this);
@@ -88,6 +103,7 @@ MainWindow::~MainWindow()
     delete m_classCacheRepository;
     delete m_contestCacheRepository;
     delete m_problemCacheRepository;
+    delete m_loginCacheRepository;
     delete m_favoriteProblemRepository;
     delete ui;
 }
@@ -100,6 +116,7 @@ void MainWindow::setupUiState()
     m_contestPage = new ContestPage(this);
     m_problemPage = new ProblemPage(this);
     m_favoritePage = new FavoritePage(this);
+    m_storagePage = new StoragePage(this);
 
     ui->pageStack->addWidget(m_loginPage);
     ui->pageStack->addWidget(m_homePage);
@@ -107,6 +124,15 @@ void MainWindow::setupUiState()
     ui->pageStack->addWidget(m_contestPage);
     ui->pageStack->addWidget(m_problemPage);
     ui->pageStack->addWidget(m_favoritePage);
+    ui->pageStack->addWidget(m_storagePage);
+
+    if (m_loginCacheService->initialize()) {
+        CachedLoginInfo loginInfo;
+        if (m_loginCacheService->loadLastLogin(&loginInfo)) {
+            m_loginPage->setCredentials(loginInfo.email, loginInfo.password);
+        }
+    }
+    applyLoginCacheState(m_loginPage->email());
 
     showRootPage(m_loginPage);
 }
@@ -123,7 +149,46 @@ void MainWindow::connectSignals()
                 return;
             }
 
+            if (requiresEmailVerification(email)) {
+                const QString code = m_loginPage->verificationCode();
+                if (code.isEmpty()) {
+                    m_loginPage->showLoginFailed(
+                        "Verification code is required for a new email.");
+                    return;
+                }
+
+                m_pendingLoginEmail = email;
+                m_pendingLoginPassword = password;
+                m_emailVerifyService->verifyCode(email, code);
+                return;
+            }
+
             m_loginService->login(email, password);
+        });
+    connect(
+        m_loginPage,
+        &LoginPage::emailEdited,
+        this,
+        [this](const QString &email) {
+            applyLoginCacheState(email);
+        });
+    connect(
+        m_loginPage,
+        &LoginPage::verificationRequested,
+        this,
+        [this](const QString &email) {
+            if (email.isEmpty()) {
+                m_loginPage->showLoginFailed("Email is required.");
+                return;
+            }
+
+            if (!requiresEmailVerification(email)) {
+                m_loginPage->showVerificationMessage(
+                    "This email is already cached. Verification is not required.");
+                return;
+            }
+
+            m_emailVerifyService->sendCode(email);
         });
     connect(
         m_loginService,
@@ -149,9 +214,68 @@ void MainWindow::connectSignals()
         &LoginService::loginSucceeded,
         this,
         [this](const QUrl &personalHomeUrl) {
+            m_loginCacheService->saveLogin(
+                m_loginPage->email(),
+                m_loginPage->password());
+            m_verifiedEmail = m_loginPage->email();
             showRootPage(m_homePage);
             m_homePage->showOpeningHome();
             m_homeService->openHome(personalHomeUrl);
+        });
+    connect(
+        m_loginCacheService,
+        &LoginCacheService::failed,
+        this,
+        [this](const QString &message) {
+            if (ui->pageStack->currentWidget() == m_loginPage) {
+                m_loginPage->showLoginFailed(message);
+            }
+        });
+    connect(
+        m_emailVerifyService,
+        &EmailVerifyService::sendingChanged,
+        this,
+        [this](bool sending) {
+            m_loginPage->showSendingVerification(sending);
+            if (!sending) {
+                m_loginPage->showIdle();
+            }
+        });
+    connect(
+        m_emailVerifyService,
+        &EmailVerifyService::verifyingChanged,
+        this,
+        [this](bool verifying) {
+            m_loginPage->showVerifyingCode(verifying);
+            if (!verifying) {
+                m_loginPage->showIdle();
+            }
+        });
+    connect(
+        m_emailVerifyService,
+        &EmailVerifyService::codeSent,
+        this,
+        [this](const QString &message) {
+            m_loginPage->showVerificationMessage(message);
+        });
+    connect(
+        m_emailVerifyService,
+        &EmailVerifyService::verified,
+        this,
+        [this](const QString &email) {
+            m_verifiedEmail = email.trimmed();
+            m_loginPage->showVerificationMessage(
+                "Verification succeeded. Logging in...");
+            m_loginService->login(m_pendingLoginEmail, m_pendingLoginPassword);
+        });
+    connect(
+        m_emailVerifyService,
+        &EmailVerifyService::failed,
+        this,
+        [this](const QString &message) {
+            m_loginPage->showLoginFailed(message);
+            m_pendingLoginEmail.clear();
+            m_pendingLoginPassword.clear();
         });
 
     connect(
@@ -170,6 +294,16 @@ void MainWindow::connectSignals()
         [this]() {
             m_favoritePage->showFoldersUnavailable();
             pushPage(m_favoritePage);
+        });
+    connect(
+        m_homePage,
+        &HomePage::storageRequested,
+        this,
+        [this]() {
+            m_storagePage->showSizes(
+                m_cacheService->formattedTotalCacheSize(),
+                m_applicationSizeService->formattedTotalApplicationSize());
+            pushPage(m_storagePage);
         });
     connect(
         m_homePage,
@@ -247,6 +381,22 @@ void MainWindow::connectSignals()
         this,
         [this](const QString &title, const QString &url) {
             openProblemPage(url, title, true);
+        });
+    connect(m_storagePage, &StoragePage::backRequested, this, &MainWindow::popPage);
+    connect(
+        m_storagePage,
+        &StoragePage::clearCacheRequested,
+        this,
+        [this]() {
+            m_storagePage->showClearing(true);
+            if (!m_cacheService->clearAllCaches()) {
+                m_storagePage->showOperationFailed(m_cacheService->lastError());
+                return;
+            }
+
+            m_storagePage->showClearSucceeded(
+                m_cacheService->formattedTotalCacheSize(),
+                m_applicationSizeService->formattedTotalApplicationSize());
         });
 
     connect(
@@ -521,4 +671,40 @@ void MainWindow::saveCurrentProblemToFavorites()
         return;
     }
 
+}
+
+bool MainWindow::requiresEmailVerification(const QString &email) const
+{
+    const QString normalizedEmail = email.trimmed();
+    if (normalizedEmail.isEmpty()) {
+        return false;
+    }
+
+    if (normalizedEmail == m_verifiedEmail) {
+        return false;
+    }
+
+    CachedLoginInfo loginInfo;
+    return !m_loginCacheService->tryLoadLoginByEmail(normalizedEmail, &loginInfo);
+}
+
+void MainWindow::applyLoginCacheState(const QString &email)
+{
+    const QString normalizedEmail = email.trimmed();
+    if (normalizedEmail != m_verifiedEmail) {
+        m_verifiedEmail.clear();
+    }
+
+    CachedLoginInfo loginInfo;
+    if (m_loginCacheService->tryLoadLoginByEmail(normalizedEmail, &loginInfo)) {
+        m_loginPage->setPassword(loginInfo.password);
+        m_loginPage->setVerificationRequired(false);
+        return;
+    }
+
+    if (!normalizedEmail.isEmpty()) {
+        m_loginPage->setVerificationRequired(true);
+    } else {
+        m_loginPage->setVerificationRequired(false);
+    }
 }

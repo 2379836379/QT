@@ -1,5 +1,6 @@
 #include "favoriteproblemrepository.h"
 
+#include <QCoreApplication>
 #include <QDir>
 #include <QSqlDatabase>
 #include <QSqlError>
@@ -9,9 +10,23 @@
 
 namespace
 {
+QDir projectRootDir()
+{
+    QDir dir(QCoreApplication::applicationDirPath());
+    if (dir.dirName().compare("build", Qt::CaseInsensitive) == 0) {
+        dir.cdUp();
+    } else if ((dir.dirName().compare("debug", Qt::CaseInsensitive) == 0
+                || dir.dirName().compare("release", Qt::CaseInsensitive) == 0)
+               && dir.cdUp()
+               && dir.dirName().compare("build", Qt::CaseInsensitive) == 0) {
+        dir.cdUp();
+    }
+    return dir;
+}
+
 QString databasePath()
 {
-    QDir dir(QDir::current().filePath("data"));
+    QDir dir(projectRootDir().filePath("data"));
     dir.mkpath(".");
     return dir.filePath("favorites.db");
 }
