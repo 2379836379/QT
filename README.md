@@ -1,5 +1,6 @@
 ### 使用
 首次使用最好用Qt Creator打开，选择kit之后即可build
+使用vscode则需要配置
 
 ### todo:
 contest reminder  
