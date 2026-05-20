@@ -8,6 +8,8 @@ class QLabel;
 class QListWidget;
 class QListWidgetItem;
 class QPushButton;
+class QFrame;
+class QWidget;
 
 class ClassPage : public QWidget
 {
@@ -26,9 +28,17 @@ signals:
     void contestSelected(const QString &title, const QString &url);
 
 private:
+    void setToolsExpanded(bool expanded);
+
     QLabel *m_titleLabel = nullptr;
-    QListWidget *m_toolsListWidget = nullptr;
+    QFrame *m_toolsFrame = nullptr;
+    QPushButton *m_toolsToggleButton = nullptr;
+    QWidget *m_toolsPanel = nullptr;
+    QWidget *m_collapsedToolsPanel = nullptr;
+    QPushButton *m_backToolButton = nullptr;
+    QPushButton *m_collapsedBackButton = nullptr;
     QListWidget *m_contestListWidget = nullptr;
     QString m_className;
     QString m_classUrl;
+    bool m_toolsExpanded = true;
 };

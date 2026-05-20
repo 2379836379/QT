@@ -58,6 +58,24 @@ bool FavoriteProblemService::createFolder(const QString &folderName, qint64 *fol
     return true;
 }
 
+bool FavoriteProblemService::removeFolder(qint64 folderId)
+{
+    if (m_repository == nullptr) {
+        emit failed("Favorite repository not available");
+        return false;
+    }
+
+    const bool ok = m_repository->removeFolder(folderId);
+    if (!ok) {
+        emit failed(m_repository->lastError());
+        return false;
+    }
+
+    emit folderRemoved(folderId);
+    emit foldersLoaded(m_repository->loadFolders());
+    return true;
+}
+
 bool FavoriteProblemService::saveFavoriteToFolder(const ProblemPageInfo &problemPageInfo,
                                                   qint64 folderId)
 {

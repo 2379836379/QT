@@ -131,6 +131,23 @@ bool FavoriteProblemRepository::createFolder(const QString &folderName, qint64 *
     return true;
 }
 
+bool FavoriteProblemRepository::removeFolder(qint64 folderId)
+{
+    if (!openDatabase()) {
+        return false;
+    }
+
+    QSqlQuery query(QSqlDatabase::database(m_connectionName));
+    query.prepare("DELETE FROM favorite_folders WHERE id = :folder_id");
+    query.bindValue(":folder_id", folderId);
+
+    const bool ok = query.exec();
+    if (!ok) {
+        m_lastError = query.lastError().text();
+    }
+    return ok;
+}
+
 QList<FavoriteFolderInfo> FavoriteProblemRepository::loadFolders() const
 {
     QList<FavoriteFolderInfo> folders;

@@ -33,22 +33,40 @@ ContestPage::ContestPage(QWidget *parent)
     auto *bottomLayout = new QHBoxLayout();
     bottomLayout->setSpacing(18);
 
-    auto *leftFrame = new QFrame(this);
-    leftFrame->setObjectName("contestLeftFrame");
-    auto *leftLayout = new QVBoxLayout(leftFrame);
+    m_toolsFrame = new QFrame(this);
+    m_toolsFrame->setObjectName("contestLeftFrame");
+    auto *leftLayout = new QVBoxLayout(m_toolsFrame);
     leftLayout->setContentsMargins(20, 18, 20, 18);
     leftLayout->setSpacing(12);
 
-    auto *toolsLabel = new QLabel("Tools", leftFrame);
-    toolsLabel->setObjectName("contestSectionLabel");
+    m_toolsToggleButton = new QPushButton(m_toolsFrame);
+    m_toolsToggleButton->setObjectName("contestToolsToggleButton");
 
-    m_toolsListWidget = new QListWidget(leftFrame);
-    m_toolsListWidget->setObjectName("contestToolsList");
-    auto *backItem = new QListWidgetItem("Back", m_toolsListWidget);
-    backItem->setData(Qt::UserRole, "back");
+    m_toolsPanel = new QWidget(m_toolsFrame);
+    auto *toolsPanelLayout = new QVBoxLayout(m_toolsPanel);
+    toolsPanelLayout->setContentsMargins(0, 0, 0, 0);
+    toolsPanelLayout->setSpacing(10);
 
-    leftLayout->addWidget(toolsLabel);
-    leftLayout->addWidget(m_toolsListWidget);
+    m_backToolButton = new QPushButton("Back", m_toolsPanel);
+    m_backToolButton->setObjectName("contestToolButton");
+    toolsPanelLayout->addWidget(m_backToolButton);
+    toolsPanelLayout->addStretch();
+
+    m_collapsedToolsPanel = new QWidget(m_toolsFrame);
+    m_collapsedToolsPanel->setObjectName("contestCollapsedToolsPanel");
+    auto *collapsedLayout = new QVBoxLayout(m_collapsedToolsPanel);
+    collapsedLayout->setContentsMargins(0, 0, 0, 0);
+    collapsedLayout->setSpacing(10);
+
+    m_collapsedBackButton = new QPushButton("B", m_collapsedToolsPanel);
+    m_collapsedBackButton->setObjectName("contestToolIconButton");
+    m_collapsedBackButton->setToolTip("Back");
+    collapsedLayout->addWidget(m_collapsedBackButton);
+    collapsedLayout->addStretch();
+
+    leftLayout->addWidget(m_toolsToggleButton);
+    leftLayout->addWidget(m_toolsPanel);
+    leftLayout->addWidget(m_collapsedToolsPanel);
     leftLayout->addStretch();
 
     auto *contentFrame = new QFrame(this);
@@ -67,7 +85,7 @@ ContestPage::ContestPage(QWidget *parent)
     contentLayout->addWidget(problemLabel);
     contentLayout->addWidget(m_problemListWidget, 1);
 
-    bottomLayout->addWidget(leftFrame, 1);
+    bottomLayout->addWidget(m_toolsFrame, 1);
     bottomLayout->addWidget(contentFrame, 4);
 
     layout->addWidget(topFrame);
@@ -90,6 +108,18 @@ ContestPage::ContestPage(QWidget *parent)
         "  font-weight: 600;"
         "  color: #2f3a33;"
         "}"
+        "#contestToolsToggleButton {"
+        "  background: transparent;"
+        "  border: none;"
+        "  padding: 0px;"
+        "  text-align: left;"
+        "  font-size: 16px;"
+        "  font-weight: 600;"
+        "  color: #2f3a33;"
+        "}"
+        "#contestToolsToggleButton:hover {"
+        "  color: #12343b;"
+        "}"
         "#contestBackButton {"
         "  min-width: 88px;"
         "  padding: 8px 14px;"
@@ -101,36 +131,60 @@ ContestPage::ContestPage(QWidget *parent)
         "#contestBackButton:hover {"
         "  background: #eef4ef;"
         "}"
-        "#contestToolsList, #contestProblemList {"
+        "#contestToolButton {"
+        "  padding: 10px 12px;"
+        "  border: none;"
+        "  border-radius: 10px;"
+        "  background: transparent;"
+        "  color: #2f3a33;"
+        "  text-align: left;"
+        "}"
+        "#contestToolButton:hover, #contestToolIconButton:hover {"
+        "  background: #eef4ef;"
+        "}"
+        "#contestToolIconButton {"
+        "  min-width: 36px;"
+        "  max-width: 36px;"
+        "  min-height: 36px;"
+        "  max-height: 36px;"
+        "  border: none;"
+        "  border-radius: 10px;"
+        "  background: transparent;"
+        "  color: #2f3a33;"
+        "  font-weight: 600;"
+        "}"
+        "#contestProblemList {"
         "  background: transparent;"
         "  border: none;"
         "  border-radius: 0px;"
         "  padding: 0px;"
         "  outline: none;"
         "}"
-        "#contestToolsList::item, #contestProblemList::item {"
+        "#contestProblemList::item {"
         "  padding: 12px 4px;"
         "  border-radius: 8px;"
         "  margin: 2px 0px;"
         "}"
-        "#contestToolsList::item:selected, #contestProblemList::item:selected {"
+        "#contestProblemList::item:selected {"
         "  background: #dcefea;"
         "  color: #12343b;"
         "}"
-        "#contestToolsList::item:hover, #contestProblemList::item:hover {"
+        "#contestProblemList::item:hover {"
         "  background: #eef4ef;"
         "}"
     );
 
+    setToolsExpanded(true);
+
     connect(backButton, &QPushButton::clicked, this, &ContestPage::backRequested);
+    connect(m_backToolButton, &QPushButton::clicked, this, &ContestPage::backRequested);
+    connect(m_collapsedBackButton, &QPushButton::clicked, this, &ContestPage::backRequested);
     connect(
-        m_toolsListWidget,
-        &QListWidget::itemClicked,
+        m_toolsToggleButton,
+        &QPushButton::clicked,
         this,
-        [this](QListWidgetItem *item) {
-            if (item->data(Qt::UserRole).toString() == "back") {
-                emit backRequested();
-            }
+        [this]() {
+            setToolsExpanded(!m_toolsExpanded);
         });
     connect(
         m_problemListWidget,
@@ -141,6 +195,27 @@ ContestPage::ContestPage(QWidget *parent)
                 item->text(),
                 item->data(Qt::UserRole).toString());
         });
+}
+
+void ContestPage::setToolsExpanded(bool expanded)
+{
+    m_toolsExpanded = expanded;
+    if (m_toolsFrame != nullptr) {
+        m_toolsFrame->setMinimumWidth(expanded ? 0 : 84);
+        m_toolsFrame->setMaximumWidth(expanded ? QWIDGETSIZE_MAX : 84);
+    }
+    if (m_toolsPanel != nullptr) {
+        m_toolsPanel->setVisible(expanded);
+    }
+    if (m_collapsedToolsPanel != nullptr) {
+        m_collapsedToolsPanel->setVisible(!expanded);
+    }
+    if (m_collapsedBackButton != nullptr) {
+        m_collapsedBackButton->setVisible(!expanded);
+    }
+    if (m_toolsToggleButton != nullptr) {
+        m_toolsToggleButton->setText(expanded ? "Tools v" : ">");
+    }
 }
 
 void ContestPage::openContest(const QString &title, const QString &url)

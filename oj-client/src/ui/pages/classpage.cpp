@@ -33,22 +33,40 @@ ClassPage::ClassPage(QWidget *parent)
     auto *bottomLayout = new QHBoxLayout();
     bottomLayout->setSpacing(18);
 
-    auto *leftFrame = new QFrame(this);
-    leftFrame->setObjectName("classLeftFrame");
-    auto *leftLayout = new QVBoxLayout(leftFrame);
+    m_toolsFrame = new QFrame(this);
+    m_toolsFrame->setObjectName("classLeftFrame");
+    auto *leftLayout = new QVBoxLayout(m_toolsFrame);
     leftLayout->setContentsMargins(20, 18, 20, 18);
     leftLayout->setSpacing(12);
 
-    auto *toolsLabel = new QLabel("Tools", leftFrame);
-    toolsLabel->setObjectName("classSectionLabel");
+    m_toolsToggleButton = new QPushButton(m_toolsFrame);
+    m_toolsToggleButton->setObjectName("classToolsToggleButton");
 
-    m_toolsListWidget = new QListWidget(leftFrame);
-    m_toolsListWidget->setObjectName("classToolsList");
-    auto *backItem = new QListWidgetItem("Back", m_toolsListWidget);
-    backItem->setData(Qt::UserRole, "back");
+    m_toolsPanel = new QWidget(m_toolsFrame);
+    auto *toolsPanelLayout = new QVBoxLayout(m_toolsPanel);
+    toolsPanelLayout->setContentsMargins(0, 0, 0, 0);
+    toolsPanelLayout->setSpacing(10);
 
-    leftLayout->addWidget(toolsLabel);
-    leftLayout->addWidget(m_toolsListWidget);
+    m_backToolButton = new QPushButton("Back", m_toolsPanel);
+    m_backToolButton->setObjectName("classToolButton");
+    toolsPanelLayout->addWidget(m_backToolButton);
+    toolsPanelLayout->addStretch();
+
+    m_collapsedToolsPanel = new QWidget(m_toolsFrame);
+    m_collapsedToolsPanel->setObjectName("classCollapsedToolsPanel");
+    auto *collapsedLayout = new QVBoxLayout(m_collapsedToolsPanel);
+    collapsedLayout->setContentsMargins(0, 0, 0, 0);
+    collapsedLayout->setSpacing(10);
+
+    m_collapsedBackButton = new QPushButton("B", m_collapsedToolsPanel);
+    m_collapsedBackButton->setObjectName("classToolIconButton");
+    m_collapsedBackButton->setToolTip("Back");
+    collapsedLayout->addWidget(m_collapsedBackButton);
+    collapsedLayout->addStretch();
+
+    leftLayout->addWidget(m_toolsToggleButton);
+    leftLayout->addWidget(m_toolsPanel);
+    leftLayout->addWidget(m_collapsedToolsPanel);
     leftLayout->addStretch();
 
     auto *contentFrame = new QFrame(this);
@@ -67,7 +85,7 @@ ClassPage::ClassPage(QWidget *parent)
     contentLayout->addWidget(contestLabel);
     contentLayout->addWidget(m_contestListWidget, 1);
 
-    bottomLayout->addWidget(leftFrame, 1);
+    bottomLayout->addWidget(m_toolsFrame, 1);
     bottomLayout->addWidget(contentFrame, 4);
 
     layout->addWidget(topFrame);
@@ -90,6 +108,18 @@ ClassPage::ClassPage(QWidget *parent)
         "  font-weight: 600;"
         "  color: #2f3a33;"
         "}"
+        "#classToolsToggleButton {"
+        "  background: transparent;"
+        "  border: none;"
+        "  padding: 0px;"
+        "  text-align: left;"
+        "  font-size: 16px;"
+        "  font-weight: 600;"
+        "  color: #2f3a33;"
+        "}"
+        "#classToolsToggleButton:hover {"
+        "  color: #12343b;"
+        "}"
         "#classBackButton {"
         "  min-width: 88px;"
         "  padding: 8px 14px;"
@@ -101,36 +131,60 @@ ClassPage::ClassPage(QWidget *parent)
         "#classBackButton:hover {"
         "  background: #eef4ef;"
         "}"
-        "#classToolsList, #classContestList {"
+        "#classToolButton {"
+        "  padding: 10px 12px;"
+        "  border: none;"
+        "  border-radius: 10px;"
+        "  background: transparent;"
+        "  color: #2f3a33;"
+        "  text-align: left;"
+        "}"
+        "#classToolButton:hover, #classToolIconButton:hover {"
+        "  background: #eef4ef;"
+        "}"
+        "#classToolIconButton {"
+        "  min-width: 36px;"
+        "  max-width: 36px;"
+        "  min-height: 36px;"
+        "  max-height: 36px;"
+        "  border: none;"
+        "  border-radius: 10px;"
+        "  background: transparent;"
+        "  color: #2f3a33;"
+        "  font-weight: 600;"
+        "}"
+        "#classContestList {"
         "  background: transparent;"
         "  border: none;"
         "  border-radius: 0px;"
         "  padding: 0px;"
         "  outline: none;"
         "}"
-        "#classToolsList::item, #classContestList::item {"
+        "#classContestList::item {"
         "  padding: 12px 4px;"
         "  border-radius: 8px;"
         "  margin: 2px 0px;"
         "}"
-        "#classToolsList::item:selected, #classContestList::item:selected {"
+        "#classContestList::item:selected {"
         "  background: #dcefea;"
         "  color: #12343b;"
         "}"
-        "#classToolsList::item:hover, #classContestList::item:hover {"
+        "#classContestList::item:hover {"
         "  background: #eef4ef;"
         "}"
     );
 
+    setToolsExpanded(true);
+
     connect(backButton, &QPushButton::clicked, this, &ClassPage::backRequested);
+    connect(m_backToolButton, &QPushButton::clicked, this, &ClassPage::backRequested);
+    connect(m_collapsedBackButton, &QPushButton::clicked, this, &ClassPage::backRequested);
     connect(
-        m_toolsListWidget,
-        &QListWidget::itemClicked,
+        m_toolsToggleButton,
+        &QPushButton::clicked,
         this,
-        [this](QListWidgetItem *item) {
-            if (item->data(Qt::UserRole).toString() == "back") {
-                emit backRequested();
-            }
+        [this]() {
+            setToolsExpanded(!m_toolsExpanded);
         });
     connect(
         m_contestListWidget,
@@ -141,6 +195,27 @@ ClassPage::ClassPage(QWidget *parent)
                 item->text(),
                 item->data(Qt::UserRole).toString());
         });
+}
+
+void ClassPage::setToolsExpanded(bool expanded)
+{
+    m_toolsExpanded = expanded;
+    if (m_toolsFrame != nullptr) {
+        m_toolsFrame->setMinimumWidth(expanded ? 0 : 84);
+        m_toolsFrame->setMaximumWidth(expanded ? QWIDGETSIZE_MAX : 84);
+    }
+    if (m_toolsPanel != nullptr) {
+        m_toolsPanel->setVisible(expanded);
+    }
+    if (m_collapsedToolsPanel != nullptr) {
+        m_collapsedToolsPanel->setVisible(!expanded);
+    }
+    if (m_collapsedBackButton != nullptr) {
+        m_collapsedBackButton->setVisible(!expanded);
+    }
+    if (m_toolsToggleButton != nullptr) {
+        m_toolsToggleButton->setText(expanded ? "Tools v" : ">");
+    }
 }
 
 void ClassPage::openClass(const QString &name, const QString &url)

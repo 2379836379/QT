@@ -111,6 +111,7 @@ private:
     QString m_verifiedEmail;
     QString m_pendingLoginEmail;
     QString m_pendingLoginPassword;
+    QString m_lastTestRequestLog;
 };
 
 #endif // MAINWINDOW_H

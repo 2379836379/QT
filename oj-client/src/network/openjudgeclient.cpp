@@ -2,6 +2,8 @@
 #include "cookiestore.h"
 
 #include <QDebug>
+#include <QHttpMultiPart>
+#include <QHttpPart>
 
 OpenJudgeClient::OpenJudgeClient(QObject *parent)
     : QObject(parent)
@@ -123,6 +125,53 @@ void OpenJudgeClient::submitSolution(const QUrl &submitActionUrl,
     QNetworkReply *reply = m_manager.post(request, payload);
     connectReply(reply, [this](const NetworkResult &result) {
         emit solutionSubmitted(result);
+    });
+}
+
+void OpenJudgeClient::judgeSource(const QString &language,
+                                  const QString &fileName,
+                                  const QByteArray &sourceCode,
+                                  const QByteArray &stdinText,
+                                  int timeLimitMs,
+                                  int memoryLimitMb)
+{
+    QUrl url(m_judgerBaseUrl + "/judge");
+    QNetworkRequest request(url);
+    request.setTransferTimeout(15000);
+    request.setHeader(
+        QNetworkRequest::UserAgentHeader,
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+        "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36");
+    request.setRawHeader("Accept", "application/json");
+
+    auto *multipart = new QHttpMultiPart(QHttpMultiPart::FormDataType);
+
+    auto appendTextPart = [multipart](const QByteArray &name, const QByteArray &value) {
+        QHttpPart part;
+        part.setHeader(
+            QNetworkRequest::ContentDispositionHeader,
+            QVariant(QString("form-data; name=\"%1\"").arg(QString::fromUtf8(name))));
+        part.setBody(value);
+        multipart->append(part);
+    };
+
+    appendTextPart("language", language.toUtf8());
+    appendTextPart("stdin", stdinText);
+    appendTextPart("time_limit_ms", QByteArray::number(timeLimitMs));
+    appendTextPart("memory_limit_mb", QByteArray::number(memoryLimitMb));
+
+    QHttpPart filePart;
+    filePart.setHeader(
+        QNetworkRequest::ContentDispositionHeader,
+        QVariant(QString("form-data; name=\"file\"; filename=\"%1\"").arg(fileName)));
+    filePart.setHeader(QNetworkRequest::ContentTypeHeader, QVariant("text/plain"));
+    filePart.setBody(sourceCode);
+    multipart->append(filePart);
+
+    QNetworkReply *reply = m_manager.post(request, multipart);
+    multipart->setParent(reply);
+    connectReply(reply, [this](const NetworkResult &result) {
+        emit judgeFinished(result);
     });
 }
 

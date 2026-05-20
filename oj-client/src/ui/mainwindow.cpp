@@ -37,9 +37,152 @@
 #include "ui/pages/problempage.h"
 #include "ui/pages/storagepage.h"
 
+#include <QInputDialog>
+#include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QJsonValue>
 #include <QWidget>
+
+namespace
+{
+QString normalizeJudgeLanguage(const QString &languageLabel)
+{
+    const QString text = languageLabel.trimmed().toLower();
+    if (text.contains("python")) {
+        return "python";
+    }
+    if (text.contains("rust") || text == "rs") {
+        return "rust";
+    }
+    if (text == "gcc" || text.startsWith("gcc(") || text.contains("gcc ")
+        || text.contains("g++")
+        || text.contains("c++") || text.contains("clang++")) {
+        return "cpp";
+    }
+    if (text == "cc" || text == "cxx") {
+        return "cpp";
+    }
+    return text;
+}
+
+QString judgeFileNameForLanguage(const QString &language)
+{
+    if (language == "python" || language == "python3" || language == "py") {
+        return "main.py";
+    }
+    if (language == "rust" || language == "rs") {
+        return "main.rs";
+    }
+    return "main.cpp";
+}
+
+QString truncatedText(const QString &text, int limit = 2000)
+{
+    if (text.size() <= limit) {
+        return text;
+    }
+    return text.left(limit) + "\n...[truncated]";
+}
+
+QString jsonValueToText(const QJsonValue &value)
+{
+    if (value.isString()) {
+        return value.toString();
+    }
+    if (value.isBool()) {
+        return value.toBool() ? "true" : "false";
+    }
+    if (value.isDouble()) {
+        return QString::number(value.toDouble());
+    }
+    if (value.isNull() || value.isUndefined()) {
+        return "<none>";
+    }
+    if (value.isArray()) {
+        return QString::fromUtf8(
+            QJsonDocument(value.toArray()).toJson(QJsonDocument::Indented));
+    }
+    return QString::fromUtf8(
+        QJsonDocument(value.toObject()).toJson(QJsonDocument::Indented));
+}
+
+QString formatJudgeResult(const NetworkResult &result)
+{
+    const QJsonDocument document = QJsonDocument::fromJson(result.body);
+    if (!document.isObject()) {
+        return QString(
+                   "Judge Result\n"
+                   "HTTP status: %1\n"
+                   "Network OK: %2\n\n"
+                   "%3")
+            .arg(QString::number(result.statusCode),
+                 result.ok ? "true" : "false",
+                 QString::fromUtf8(result.body));
+    }
+
+    const QJsonObject object = document.object();
+    QStringList sections;
+    sections << QString("Judge Result\nHTTP status: %1\nNetwork OK: %2")
+                    .arg(QString::number(result.statusCode), result.ok ? "true" : "false");
+
+    const QStringList summaryKeys = {"status",
+                                     "message",
+                                     "exit_code",
+                                     "time_ms",
+                                     "memory_mb",
+                                     "compile_exit_code"};
+    QStringList summaryLines;
+    for (const QString &key : summaryKeys) {
+        if (object.contains(key)) {
+            summaryLines << QString("%1: %2").arg(key, jsonValueToText(object.value(key)));
+        }
+    }
+    if (!summaryLines.isEmpty()) {
+        sections << summaryLines.join('\n');
+    }
+
+    const QStringList outputKeys = {"stdout", "stderr", "compile_stdout", "compile_stderr"};
+    for (const QString &key : outputKeys) {
+        if (!object.contains(key)) {
+            continue;
+        }
+        const QString value = jsonValueToText(object.value(key));
+        if (value.isEmpty() || value == "<none>") {
+            continue;
+        }
+        sections << QString("%1:\n%2").arg(key, value);
+    }
+
+    sections << QString("Raw JSON:\n%1")
+                    .arg(QString::fromUtf8(document.toJson(QJsonDocument::Indented)));
+    return sections.join("\n\n");
+}
+
+QString formatJudgeRequest(const QString &language,
+                           const QString &fileName,
+                           const QString &sourceText,
+                           const QString &stdinText)
+{
+    return QString(
+               "Judge Request\n"
+               "POST http://10.129.240.62:18080/judge\n"
+               "language: %1\n"
+               "file: %2\n"
+               "time_limit_ms: 2000\n"
+               "memory_limit_mb: 256\n"
+               "source_length: %3\n"
+               "stdin_length: %4\n\n"
+               "stdin:\n%5\n\n"
+               "source:\n%6")
+        .arg(language,
+             fileName,
+             QString::number(sourceText.size()),
+             QString::number(stdinText.size()),
+             truncatedText(stdinText),
+             truncatedText(sourceText));
+}
+}
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
@@ -293,6 +436,8 @@ void MainWindow::connectSignals()
         this,
         [this]() {
             m_favoritePage->showFoldersUnavailable();
+            m_favoritePage->showFolders(
+                m_favoriteProblemService->loadFolders());
             pushPage(m_favoritePage);
         });
     connect(
@@ -357,6 +502,35 @@ void MainWindow::connectSignals()
         &MainWindow::saveCurrentProblemToFavorites);
     connect(
         m_problemPage,
+        &ProblemPage::testRequested,
+        this,
+        [this](const QString &languageLabel,
+               const QString &sourceText,
+               const QString &stdinText) {
+            const QString language = normalizeJudgeLanguage(languageLabel);
+            if (language.isEmpty()) {
+                m_problemPage->showTestFailed("No language selected.");
+                return;
+            }
+            if (sourceText.trimmed().isEmpty()) {
+                m_problemPage->showTestFailed("Source code is empty.");
+                return;
+            }
+
+            m_lastTestRequestLog = formatJudgeRequest(
+                language,
+                judgeFileNameForLanguage(language),
+                sourceText,
+                stdinText);
+            m_problemPage->showTesting(true);
+            m_problemPage->showTestResult(m_lastTestRequestLog + "\n\nRunning test...");
+            m_client->judgeSource(language,
+                                  judgeFileNameForLanguage(language),
+                                  sourceText.toUtf8(),
+                                  stdinText.toUtf8());
+        });
+    connect(
+        m_problemPage,
         &ProblemPage::submitRequested,
         this,
         [this](const QString &language, const QString &sourceText) {
@@ -373,7 +547,46 @@ void MainWindow::connectSignals()
         &FavoritePage::refreshRequested,
         this,
         [this]() {
-            m_favoritePage->showRefreshUnavailable();
+            m_favoritePage->showFolders(
+                m_favoriteProblemService->loadFolders());
+        });
+    connect(
+        m_favoritePage,
+        &FavoritePage::createFolderRequested,
+        this,
+        [this](const QString &folderName) {
+            if (!m_favoriteProblemService->createFolder(folderName)) {
+                m_favoritePage->showFavoriteOperationFailed(
+                    m_favoriteProblemService->lastError());
+                return;
+            }
+
+            m_favoritePage->showFolders(
+                m_favoriteProblemService->loadFolders());
+        });
+    connect(
+        m_favoritePage,
+        &FavoritePage::folderRemoveRequested,
+        this,
+        [this](qint64 folderId, const QString &) {
+            if (!m_favoriteProblemService->removeFolder(folderId)) {
+                m_favoritePage->showFavoriteOperationFailed(
+                    m_favoriteProblemService->lastError());
+                return;
+            }
+
+            m_favoritePage->showFolders(
+                m_favoriteProblemService->loadFolders());
+        });
+    connect(
+        m_favoritePage,
+        &FavoritePage::folderSelected,
+        this,
+        [this](qint64 folderId, const QString &folderName) {
+            m_favoritePage->showFavorites(
+                folderId,
+                folderName,
+                m_favoriteProblemService->loadFavoritesInFolder(folderId));
         });
     connect(
         m_favoritePage,
@@ -381,6 +594,24 @@ void MainWindow::connectSignals()
         this,
         [this](const QString &title, const QString &url) {
             openProblemPage(url, title, true);
+        });
+    connect(
+        m_favoritePage,
+        &FavoritePage::favoriteRemoveRequested,
+        this,
+        [this](qint64 folderId,
+               const QString &folderName,
+               const QString &problemUrl) {
+            if (!m_favoriteProblemService->removeFavoriteFromFolder(problemUrl, folderId)) {
+                m_favoritePage->showFavoriteOperationFailed(
+                    m_favoriteProblemService->lastError());
+                return;
+            }
+
+            m_favoritePage->showFavorites(
+                folderId,
+                folderName,
+                m_favoriteProblemService->loadFavoritesInFolder(folderId));
         });
     connect(m_storagePage, &StoragePage::backRequested, this, &MainWindow::popPage);
     connect(
@@ -399,6 +630,22 @@ void MainWindow::connectSignals()
                 m_applicationSizeService->formattedTotalApplicationSize());
         });
 
+    connect(
+        m_client,
+        &OpenJudgeClient::judgeFinished,
+        this,
+        [this](const NetworkResult &result) {
+            m_problemPage->showTesting(false);
+            if (!result.ok) {
+                m_problemPage->showTestFailed(
+                    m_lastTestRequestLog
+                    + QString("\n\nJudge Response\nHTTP status: %1\nNetwork error: %2")
+                          .arg(QString::number(result.statusCode), result.errorString));
+                return;
+            }
+            m_problemPage->showTestResult(
+                m_lastTestRequestLog + "\n\n" + formatJudgeResult(result));
+        });
     connect(
         m_favoriteProblemService,
         &FavoriteProblemService::favoriteLoaded,
@@ -421,7 +668,6 @@ void MainWindow::connectSignals()
                 m_problemPage->showProblemLoadFailed(message);
             }
         });
-
     connect(
         m_resultService,
         &ResultService::loadingChanged,
@@ -671,6 +917,69 @@ void MainWindow::saveCurrentProblemToFavorites()
         return;
     }
 
+    const QList<FavoriteFolderInfo> folders = m_favoriteProblemService->loadFolders();
+    if (folders.isEmpty()) {
+        const QString newFolderName = QInputDialog::getText(
+            this,
+            "Create Favorite Folder",
+            "No favorite folders yet. Create one:");
+        if (newFolderName.trimmed().isEmpty()) {
+            return;
+        }
+
+        if (!m_favoriteProblemService->createFolder(newFolderName.trimmed())) {
+            m_problemPage->showProblemLoadFailed(m_favoriteProblemService->lastError());
+            return;
+        }
+    }
+
+    const QList<FavoriteFolderInfo> selectableFolders = m_favoriteProblemService->loadFolders();
+    if (selectableFolders.isEmpty()) {
+        m_problemPage->showProblemLoadFailed("No favorite folder available.");
+        return;
+    }
+
+    QStringList folderNames;
+    for (const FavoriteFolderInfo &folder : selectableFolders) {
+        folderNames.append(folder.name);
+    }
+
+    bool ok = false;
+    const QString selectedFolderName = QInputDialog::getItem(
+        this,
+        "Select Favorite Folder",
+        "Save current problem to:",
+        folderNames,
+        0,
+        false,
+        &ok);
+    if (!ok || selectedFolderName.isEmpty()) {
+        return;
+    }
+
+    qint64 folderId = -1;
+    for (const FavoriteFolderInfo &folder : selectableFolders) {
+        if (folder.name == selectedFolderName) {
+            folderId = folder.id;
+            break;
+        }
+    }
+    if (folderId < 0) {
+        m_problemPage->showProblemLoadFailed("Selected favorite folder not found.");
+        return;
+    }
+
+    if (!m_favoriteProblemService->saveFavoriteToFolder(m_currentProblemInfo, folderId)) {
+        m_problemPage->showProblemLoadFailed(m_favoriteProblemService->lastError());
+        return;
+    }
+
+    if (ui->pageStack->currentWidget() == m_favoritePage) {
+        m_favoritePage->showFavorites(
+            folderId,
+            selectedFolderName,
+            m_favoriteProblemService->loadFavoritesInFolder(folderId));
+    }
 }
 
 bool MainWindow::requiresEmailVerification(const QString &email) const

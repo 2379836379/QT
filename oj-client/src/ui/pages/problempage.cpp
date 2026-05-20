@@ -9,6 +9,8 @@
 #include <QPlainTextEdit>
 #include <QPushButton>
 #include <QRegularExpression>
+#include <QSplitter>
+#include <QStackedWidget>
 #include <QTextEdit>
 #include <QVBoxLayout>
 
@@ -194,24 +196,47 @@ ProblemPage::ProblemPage(QWidget *parent)
     auto *bottomLayout = new QHBoxLayout();
     bottomLayout->setSpacing(18);
 
-    auto *leftFrame = new QFrame(this);
-    leftFrame->setObjectName("problemLeftFrame");
-    auto *leftLayout = new QVBoxLayout(leftFrame);
+    m_toolsFrame = new QFrame(this);
+    m_toolsFrame->setObjectName("problemLeftFrame");
+    auto *leftLayout = new QVBoxLayout(m_toolsFrame);
     leftLayout->setContentsMargins(20, 18, 20, 18);
     leftLayout->setSpacing(12);
 
-    auto *toolsLabel = new QLabel("Tools", leftFrame);
-    toolsLabel->setObjectName("problemSectionLabel");
+    m_toolsToggleButton = new QPushButton(m_toolsFrame);
+    m_toolsToggleButton->setObjectName("problemToolsToggleButton");
 
-    m_toolsListWidget = new QListWidget(leftFrame);
-    m_toolsListWidget->setObjectName("problemToolsList");
-    auto *backItem = new QListWidgetItem("Back", m_toolsListWidget);
-    backItem->setData(Qt::UserRole, "back");
-    auto *favoriteItem = new QListWidgetItem("Favorite Current Problem", m_toolsListWidget);
-    favoriteItem->setData(Qt::UserRole, "favorite");
+    m_toolsPanel = new QWidget(m_toolsFrame);
+    auto *toolsPanelLayout = new QVBoxLayout(m_toolsPanel);
+    toolsPanelLayout->setContentsMargins(0, 0, 0, 0);
+    toolsPanelLayout->setSpacing(10);
 
-    leftLayout->addWidget(toolsLabel);
-    leftLayout->addWidget(m_toolsListWidget);
+    m_backToolButton = new QPushButton("Back", m_toolsPanel);
+    m_backToolButton->setObjectName("problemToolButton");
+    m_favoriteToolButton = new QPushButton("Favorite Current Problem", m_toolsPanel);
+    m_favoriteToolButton->setObjectName("problemToolButton");
+    toolsPanelLayout->addWidget(m_backToolButton);
+    toolsPanelLayout->addWidget(m_favoriteToolButton);
+    toolsPanelLayout->addStretch();
+
+    m_collapsedToolsPanel = new QWidget(m_toolsFrame);
+    m_collapsedToolsPanel->setObjectName("problemCollapsedToolsPanel");
+    auto *collapsedLayout = new QVBoxLayout(m_collapsedToolsPanel);
+    collapsedLayout->setContentsMargins(0, 0, 0, 0);
+    collapsedLayout->setSpacing(10);
+
+    m_collapsedBackButton = new QPushButton("B", m_collapsedToolsPanel);
+    m_collapsedBackButton->setObjectName("problemToolIconButton");
+    m_collapsedBackButton->setToolTip("Back");
+    m_collapsedFavoriteButton = new QPushButton("F", m_collapsedToolsPanel);
+    m_collapsedFavoriteButton->setObjectName("problemToolIconButton");
+    m_collapsedFavoriteButton->setToolTip("Favorite Current Problem");
+    collapsedLayout->addWidget(m_collapsedBackButton);
+    collapsedLayout->addWidget(m_collapsedFavoriteButton);
+    collapsedLayout->addStretch();
+
+    leftLayout->addWidget(m_toolsToggleButton);
+    leftLayout->addWidget(m_toolsPanel);
+    leftLayout->addWidget(m_collapsedToolsPanel);
     leftLayout->addStretch();
 
     auto *problemFrame = new QFrame(this);
@@ -245,22 +270,90 @@ ProblemPage::ProblemPage(QWidget *parent)
     m_codeEdit->setObjectName("problemCodeEdit");
     m_codeEdit->setPlaceholderText("Write your source code here.");
     m_codeEdit->setMinimumHeight(180);
+    auto *resultTabLayout = new QHBoxLayout();
+    resultTabLayout->setContentsMargins(0, 0, 0, 0);
+    resultTabLayout->setSpacing(8);
+
+    m_testTabButton = new QPushButton("test", submitFrame);
+    m_testTabButton->setObjectName("problemResultTabButton");
+    m_testTabButton->setCheckable(true);
+    m_submitTabButton = new QPushButton("submit", submitFrame);
+    m_submitTabButton->setObjectName("problemResultTabButton");
+    m_submitTabButton->setCheckable(true);
+    resultTabLayout->addWidget(m_testTabButton);
+    resultTabLayout->addWidget(m_submitTabButton);
+
+    m_inputButton = new QPushButton("input", submitFrame);
+    m_inputButton->setObjectName("problemInputButton");
     m_submitButton = new QPushButton("Submit Code", submitFrame);
     m_submitButton->setObjectName("problemSubmitButton");
-    m_resultTextEdit = new QTextEdit(submitFrame);
-    m_resultTextEdit->setObjectName("problemResultText");
-    m_resultTextEdit->setReadOnly(true);
-    m_resultTextEdit->setMinimumHeight(140);
+    resultTabLayout->addStretch();
+    resultTabLayout->addWidget(m_inputButton, 0, Qt::AlignRight);
+    resultTabLayout->addWidget(m_submitButton, 0, Qt::AlignRight);
+
+    m_resultStack = new QStackedWidget(submitFrame);
+    m_resultStack->setObjectName("problemResultStack");
+    m_testPaneSplitter = new QSplitter(Qt::Horizontal, m_resultStack);
+    m_testPaneSplitter->setObjectName("problemTestPaneSplitter");
+    m_testPaneSplitter->setChildrenCollapsible(false);
+    m_testPaneSplitter->setHandleWidth(8);
+
+    m_testInputTextEdit = new QTextEdit(m_testPaneSplitter);
+    m_testInputTextEdit->setObjectName("problemResultText");
+    m_testInputTextEdit->setReadOnly(false);
+    m_testInputTextEdit->setMinimumHeight(140);
+    m_testInputTextEdit->setPlaceholderText("Write test input here.");
+
+    m_testResultTextEdit = new QTextEdit(m_testPaneSplitter);
+    m_testResultTextEdit->setObjectName("problemResultText");
+    m_testResultTextEdit->setReadOnly(false);
+    m_testResultTextEdit->setMinimumHeight(140);
+    m_testResultTextEdit->setReadOnly(true);
+    m_testResultTextEdit->setPlaceholderText("Test output will appear here.");
+    m_testPaneSplitter->setStretchFactor(0, 1);
+    m_testPaneSplitter->setStretchFactor(1, 1);
+    m_testPaneSplitter->setSizes({320, 320});
+
+    m_submitResultTextEdit = new QTextEdit(m_resultStack);
+    m_submitResultTextEdit->setObjectName("problemResultText");
+    m_submitResultTextEdit->setReadOnly(true);
+    m_submitResultTextEdit->setMinimumHeight(140);
+    m_resultStack->addWidget(m_testPaneSplitter);
+    m_resultStack->addWidget(m_submitResultTextEdit);
+
+    auto *resultPanel = new QWidget(submitFrame);
+    auto *resultPanelLayout = new QVBoxLayout(resultPanel);
+    resultPanelLayout->setContentsMargins(0, 0, 0, 0);
+    resultPanelLayout->setSpacing(14);
+    resultPanelLayout->addLayout(resultTabLayout);
+    resultPanelLayout->addWidget(m_resultStack, 1);
+
+    m_submitPaneSplitter = new QSplitter(Qt::Vertical, submitFrame);
+    m_submitPaneSplitter->setObjectName("problemSubmitPaneSplitter");
+    m_submitPaneSplitter->setChildrenCollapsible(false);
+    m_submitPaneSplitter->setHandleWidth(8);
+    m_submitPaneSplitter->addWidget(m_codeEdit);
+    m_submitPaneSplitter->addWidget(resultPanel);
+    m_submitPaneSplitter->setStretchFactor(0, 3);
+    m_submitPaneSplitter->setStretchFactor(1, 2);
+    m_submitPaneSplitter->setSizes({360, 240});
 
     submitLayout->addWidget(submitLabel);
     submitLayout->addWidget(m_languageComboBox);
-    submitLayout->addWidget(m_codeEdit, 1);
-    submitLayout->addWidget(m_submitButton);
-    submitLayout->addWidget(m_resultTextEdit, 1);
+    submitLayout->addWidget(m_submitPaneSplitter, 1);
 
-    bottomLayout->addWidget(leftFrame, 1);
-    bottomLayout->addWidget(problemFrame, 2);
-    bottomLayout->addWidget(submitFrame, 2);
+    auto *contentSplitter = new QSplitter(Qt::Horizontal, this);
+    contentSplitter->setObjectName("problemContentSplitter");
+    contentSplitter->setChildrenCollapsible(false);
+    contentSplitter->setHandleWidth(10);
+    contentSplitter->addWidget(problemFrame);
+    contentSplitter->addWidget(submitFrame);
+    contentSplitter->setStretchFactor(0, 1);
+    contentSplitter->setStretchFactor(1, 1);
+    contentSplitter->setSizes({640, 640});
+
+    bottomLayout->addWidget(m_toolsFrame, 1);
+    bottomLayout->addWidget(contentSplitter, 4);
 
     layout->addWidget(topFrame);
     layout->addLayout(bottomLayout, 1);
@@ -272,6 +365,24 @@ ProblemPage::ProblemPage(QWidget *parent)
         "  border: 1px solid #ded8cc;"
         "  border-radius: 16px;"
         "}"
+        "#problemContentSplitter::handle {"
+        "  background: transparent;"
+        "}"
+        "#problemContentSplitter::handle:hover {"
+        "  background: rgba(18, 52, 59, 0.08);"
+        "}"
+        "#problemSubmitPaneSplitter::handle {"
+        "  background: transparent;"
+        "}"
+        "#problemSubmitPaneSplitter::handle:hover {"
+        "  background: rgba(18, 52, 59, 0.08);"
+        "}"
+        "#problemTestPaneSplitter::handle {"
+        "  background: transparent;"
+        "}"
+        "#problemTestPaneSplitter::handle:hover {"
+        "  background: rgba(18, 52, 59, 0.08);"
+        "}"
         "#problemTitleLabel {"
         "  font-size: 28px;"
         "  font-weight: 600;"
@@ -282,7 +393,19 @@ ProblemPage::ProblemPage(QWidget *parent)
         "  font-weight: 600;"
         "  color: #2f3a33;"
         "}"
-        "#problemBackButton, #problemSubmitButton {"
+        "#problemToolsToggleButton {"
+        "  background: transparent;"
+        "  border: none;"
+        "  padding: 0px;"
+        "  text-align: left;"
+        "  font-size: 16px;"
+        "  font-weight: 600;"
+        "  color: #2f3a33;"
+        "}"
+        "#problemToolsToggleButton:hover {"
+        "  color: #12343b;"
+        "}"
+        "#problemBackButton, #problemSubmitButton, #problemInputButton {"
         "  min-width: 88px;"
         "  padding: 8px 14px;"
         "  border: 1px solid #cdd7cf;"
@@ -290,27 +413,43 @@ ProblemPage::ProblemPage(QWidget *parent)
         "  background: #f7f5ef;"
         "  color: #243029;"
         "}"
-        "#problemBackButton:hover, #problemSubmitButton:hover {"
+        "#problemBackButton:hover, #problemSubmitButton:hover, #problemInputButton:hover {"
         "  background: #eef4ef;"
         "}"
-        "#problemToolsList {"
-        "  background: transparent;"
+        "#problemResultTabButton {"
+        "  min-width: 72px;"
+        "  padding: 6px 12px;"
+        "  border: 1px solid #d9d4c8;"
+        "  border-radius: 10px;"
+        "  background: #f7f5ef;"
+        "  color: #526056;"
+        "}"
+        "#problemResultTabButton:checked {"
+        "  background: #e4efe7;"
+        "  color: #1f2328;"
+        "  border-color: #b9cabd;"
+        "}"
+        "#problemToolButton {"
+        "  padding: 10px 12px;"
         "  border: none;"
-        "  border-radius: 0px;"
-        "  padding: 0px;"
-        "  outline: none;"
+        "  border-radius: 10px;"
+        "  background: transparent;"
+        "  color: #2f3a33;"
+        "  text-align: left;"
         "}"
-        "#problemToolsList::item {"
-        "  padding: 12px 4px;"
-        "  border-radius: 8px;"
-        "  margin: 2px 0px;"
-        "}"
-        "#problemToolsList::item:selected {"
-        "  background: #dcefea;"
-        "  color: #12343b;"
-        "}"
-        "#problemToolsList::item:hover {"
+        "#problemToolButton:hover, #problemToolIconButton:hover {"
         "  background: #eef4ef;"
+        "}"
+        "#problemToolIconButton {"
+        "  min-width: 36px;"
+        "  max-width: 36px;"
+        "  min-height: 36px;"
+        "  max-height: 36px;"
+        "  border: none;"
+        "  border-radius: 10px;"
+        "  background: transparent;"
+        "  color: #2f3a33;"
+        "  font-weight: 600;"
         "}"
         "#problemDetailText, #problemResultText, #problemCodeEdit, #problemLanguageCombo {"
         "  background: #fcfbf8;"
@@ -320,30 +459,105 @@ ProblemPage::ProblemPage(QWidget *parent)
         "}"
     );
 
+    setToolsExpanded(true);
+
     connect(backButton, &QPushButton::clicked, this, &ProblemPage::backRequested);
+    connect(m_backToolButton, &QPushButton::clicked, this, &ProblemPage::backRequested);
+    connect(m_collapsedBackButton, &QPushButton::clicked, this, &ProblemPage::backRequested);
+    connect(m_favoriteToolButton, &QPushButton::clicked, this, &ProblemPage::favoriteRequested);
+    connect(m_collapsedFavoriteButton, &QPushButton::clicked, this, &ProblemPage::favoriteRequested);
     connect(
-        m_toolsListWidget,
-        &QListWidget::itemClicked,
+        m_toolsToggleButton,
+        &QPushButton::clicked,
         this,
-        [this](QListWidgetItem *item) {
-            const QString action = item->data(Qt::UserRole).toString();
-            if (action == "back") {
-                emit backRequested();
-            } else if (action == "favorite") {
-                emit favoriteRequested();
-            }
+        [this]() {
+            setToolsExpanded(!m_toolsExpanded);
+        });
+    connect(
+        m_inputButton,
+        &QPushButton::clicked,
+        this,
+        [this]() {
+            setResultTab(true);
+            emit testRequested(currentLanguageLabel(),
+                               m_codeEdit->toPlainText(),
+                               m_testInputTextEdit->toPlainText());
         });
     connect(
         m_submitButton,
         &QPushButton::clicked,
         this,
         [this]() {
+            setResultTab(false);
             emit submitRequested(
                 m_languageComboBox->currentData().toString(),
                 m_codeEdit->toPlainText());
         });
+    connect(
+        m_testTabButton,
+        &QPushButton::clicked,
+        this,
+        [this]() {
+            setResultTab(true);
+        });
+    connect(
+        m_submitTabButton,
+        &QPushButton::clicked,
+        this,
+        [this]() {
+            setResultTab(false);
+        });
 
     openProblem();
+}
+
+void ProblemPage::setToolsExpanded(bool expanded)
+{
+    m_toolsExpanded = expanded;
+    if (m_toolsFrame != nullptr) {
+        m_toolsFrame->setMinimumWidth(expanded ? 0 : 84);
+        m_toolsFrame->setMaximumWidth(expanded ? QWIDGETSIZE_MAX : 84);
+    }
+    if (m_toolsPanel != nullptr) {
+        m_toolsPanel->setVisible(expanded);
+    }
+    if (m_collapsedToolsPanel != nullptr) {
+        m_collapsedToolsPanel->setVisible(!expanded);
+    }
+    const QList<QPushButton *> iconButtons = {m_collapsedBackButton,
+                                              m_collapsedFavoriteButton};
+    for (QPushButton *button : iconButtons) {
+        if (button != nullptr) {
+            button->setVisible(!expanded);
+        }
+    }
+    if (m_toolsToggleButton != nullptr) {
+        m_toolsToggleButton->setText(expanded ? "Tools v" : ">");
+    }
+}
+
+void ProblemPage::setResultTab(bool showTestTab)
+{
+    if (m_resultStack != nullptr) {
+        m_resultStack->setCurrentIndex(showTestTab ? 0 : 1);
+    }
+    if (m_testTabButton != nullptr) {
+        m_testTabButton->setChecked(showTestTab);
+    }
+    if (m_submitTabButton != nullptr) {
+        m_submitTabButton->setChecked(!showTestTab);
+    }
+    if (m_submitButton != nullptr) {
+        const bool canSubmit = m_languageComboBox != nullptr
+                               && m_languageComboBox->count() > 0
+                               && m_languageComboBox->isEnabled();
+        m_submitButton->setVisible(!showTestTab);
+        m_submitButton->setEnabled(!showTestTab && canSubmit);
+    }
+    if (m_inputButton != nullptr) {
+        m_inputButton->setVisible(showTestTab);
+        m_inputButton->setEnabled(showTestTab && !m_testing);
+    }
 }
 
 void ProblemPage::openProblem(const QString &problemTitle)
@@ -401,8 +615,8 @@ void ProblemPage::showSubmitPageLoaded(const SubmitPageInfo &submitPageInfo,
     const bool hasLanguages = m_languageComboBox->count() > 0;
     m_languageComboBox->setEnabled(hasLanguages);
     m_codeEdit->setEnabled(true);
-    m_submitButton->setEnabled(hasLanguages);
-    m_resultTextEdit->setPlainText(
+    m_submitButton->setEnabled(hasLanguages && m_submitTabButton->isChecked());
+    m_submitResultTextEdit->setPlainText(
         QString("Submit page loaded.\nAction: %1")
             .arg(submitPageInfo.submitActionUrl));
 }
@@ -410,12 +624,38 @@ void ProblemPage::showSubmitPageLoaded(const SubmitPageInfo &submitPageInfo,
 void ProblemPage::showSubmitting(bool submitting)
 {
     m_submitButton->setEnabled(
-        !submitting && m_languageComboBox->count() > 0 && m_languageComboBox->isEnabled());
+        !submitting && m_submitTabButton->isChecked() && m_languageComboBox->count() > 0
+        && m_languageComboBox->isEnabled());
+}
+
+void ProblemPage::showTesting(bool testing)
+{
+    m_testing = testing;
+    if (testing) {
+        setResultTab(true);
+        m_testResultTextEdit->setPlainText("Running test...");
+    }
+    if (m_inputButton != nullptr) {
+        m_inputButton->setEnabled(m_testTabButton->isChecked() && !testing);
+    }
 }
 
 void ProblemPage::showMissingLanguage()
 {
-    m_resultTextEdit->setPlainText("No language selected.");
+    setResultTab(false);
+    m_submitResultTextEdit->setPlainText("No language selected.");
+}
+
+void ProblemPage::showTestResult(const QString &text)
+{
+    setResultTab(true);
+    m_testResultTextEdit->setPlainText(text);
+}
+
+void ProblemPage::showTestFailed(const QString &message)
+{
+    setResultTab(true);
+    m_testResultTextEdit->setPlainText(message);
 }
 
 void ProblemPage::showSubmitPayloadBuilt(const QString &languageValue,
@@ -426,13 +666,15 @@ void ProblemPage::showSubmitPayloadBuilt(const QString &languageValue,
         languageValue,
         m_codeEdit->toPlainText(),
         payload);
-    m_resultTextEdit->setPlainText(m_lastSubmitPreview);
+    setResultTab(false);
+    m_submitResultTextEdit->setPlainText(m_lastSubmitPreview);
 }
 
 void ProblemPage::showSubmitResult(const NetworkResult &result)
 {
     const QString resultText = formatSubmitResult(result);
-    m_resultTextEdit->setPlainText(
+    setResultTab(false);
+    m_submitResultTextEdit->setPlainText(
         m_lastSubmitPreview.isEmpty()
             ? resultText
             : m_lastSubmitPreview + "\n\n" + resultText);
@@ -440,17 +682,20 @@ void ProblemPage::showSubmitResult(const NetworkResult &result)
 
 void ProblemPage::showSubmitFailed(const QString &message)
 {
-    m_resultTextEdit->setPlainText(message);
+    setResultTab(false);
+    m_submitResultTextEdit->setPlainText(message);
 }
 
 void ProblemPage::appendResultPageInfo(const ResultPageInfo &resultPageInfo)
 {
-    m_resultTextEdit->append("\n\n" + formatResultPageInfo(resultPageInfo));
+    setResultTab(false);
+    m_submitResultTextEdit->append("\n\n" + formatResultPageInfo(resultPageInfo));
 }
 
 void ProblemPage::appendResultFailure(const QString &message)
 {
-    m_resultTextEdit->append("\n\nResult page load failed:\n" + message);
+    setResultTab(false);
+    m_submitResultTextEdit->append("\n\nResult page load failed:\n" + message);
 }
 
 QString ProblemPage::currentLanguageLabel() const
@@ -460,17 +705,11 @@ QString ProblemPage::currentLanguageLabel() const
 
 void ProblemPage::setFavoriteEnabled(bool enabled)
 {
-    for (int i = 0; i < m_toolsListWidget->count(); ++i) {
-        QListWidgetItem *item = m_toolsListWidget->item(i);
-        if (item->data(Qt::UserRole).toString() == "favorite") {
-            Qt::ItemFlags flags = item->flags();
-            if (enabled) {
-                item->setFlags(flags | Qt::ItemIsEnabled);
-            } else {
-                item->setFlags(flags & ~Qt::ItemIsEnabled);
-            }
-            break;
-        }
+    if (m_favoriteToolButton != nullptr) {
+        m_favoriteToolButton->setEnabled(enabled);
+    }
+    if (m_collapsedFavoriteButton != nullptr) {
+        m_collapsedFavoriteButton->setEnabled(enabled);
     }
 }
 
@@ -478,15 +717,26 @@ void ProblemPage::setSubmitEnabled(bool enabled)
 {
     m_languageComboBox->setEnabled(enabled && m_languageComboBox->count() > 0);
     m_codeEdit->setEnabled(enabled && m_languageComboBox->count() > 0);
-    m_submitButton->setEnabled(enabled && m_languageComboBox->count() > 0);
+    m_submitButton->setEnabled(
+        enabled && m_submitTabButton->isChecked() && m_languageComboBox->count() > 0);
+    if (m_inputButton != nullptr) {
+        m_inputButton->setEnabled(
+            enabled && m_testTabButton->isChecked() && !m_testing
+            && m_languageComboBox->count() > 0);
+    }
 }
 
 void ProblemPage::resetSubmitPanel()
 {
+    m_testing = false;
     m_languageComboBox->clear();
     m_languageComboBox->setEnabled(false);
     m_codeEdit->setEnabled(false);
     m_submitButton->setEnabled(false);
-    m_resultTextEdit->setPlainText("Preparing submit options...");
+    m_inputButton->setEnabled(false);
+    m_testInputTextEdit->clear();
+    m_testResultTextEdit->clear();
+    m_submitResultTextEdit->setPlainText("Preparing submit options...");
+    setResultTab(true);
     m_lastSubmitPreview.clear();
 }

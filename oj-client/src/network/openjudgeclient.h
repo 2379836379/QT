@@ -49,6 +49,12 @@ public:
     void submitSolution(const QUrl &submitActionUrl,
                         const QByteArray &payload,
                         const QUrl &refererUrl = QUrl());
+    void judgeSource(const QString &language,
+                     const QString &fileName,
+                     const QByteArray &sourceCode,
+                     const QByteArray &stdinText,
+                     int timeLimitMs = 2000,
+                     int memoryLimitMb = 256);
     void fetchProblemList(int page = 1);
     void fetchProblemDetail(const QString &problemId);
     void fetchSubmissionList(int page = 1);
@@ -64,6 +70,7 @@ signals:
     void resultPageFinished(const NetworkResult &result);
     void submitPageFinished(const NetworkResult &result);
     void solutionSubmitted(const NetworkResult &result);
+    void judgeFinished(const NetworkResult &result);
     void problemListFinished(const NetworkResult &result);
     void problemDetailFinished(const NetworkResult &result);
     void submissionListFinished(const NetworkResult &result);
@@ -78,5 +85,6 @@ private:
 private:
     QNetworkAccessManager m_manager;
     QString m_baseUrl = "http://openjudge.cn";
+    QString m_judgerBaseUrl = "http://10.129.240.62:18080";
     CookieStore *m_cookieStore = nullptr;
 };

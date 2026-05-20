@@ -14,6 +14,7 @@ public:
 
     bool initialize();
     bool createFolder(const QString &folderName, qint64 *folderId = nullptr);
+    bool removeFolder(qint64 folderId);
     QList<FavoriteFolderInfo> loadFolders() const;
     QList<ProblemPageInfo> loadFavoritesInFolder(qint64 folderId) const;
     bool saveFavoriteToFolder(const ProblemPageInfo &problemPageInfo, qint64 folderId);
