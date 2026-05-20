@@ -1,7 +1,11 @@
+### 使用
+首次使用最好用Qt Creator打开，选择kit之后即可build
+
 ### todo:
 contest reminder  
 AI   
-local test  
+ui  
+local test    
 
 ### finished：
 network  
