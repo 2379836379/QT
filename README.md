@@ -5,8 +5,7 @@
 ### todo:
 contest reminder  
 AI   
-ui  
-local test    
+ui    
 
 ### finished：
 network  
@@ -16,7 +15,8 @@ favorite
 basic ui  
 due list  
 login/Email Verification   
-Go server on CLab Ubuntu(OJ-server)
+Go server on CLab Ubuntu(OJ-server/ OJ-judger)
+local test  
 
 
 
