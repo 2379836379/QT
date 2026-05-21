@@ -43,15 +43,28 @@ public:
                                 const QByteArray &payload);
     void showSubmitResult(const NetworkResult &result);
     void showSubmitFailed(const QString &message);
+    void setAiConfigSummary(const QString &summary);
+    void showAiThinking(bool thinking);
+    void appendAiResponse(const QString &delta);
+    void showAiResponse(const QString &text);
+    void showAiFailed(const QString &message);
+    void setSourceCodeText(const QString &text);
+    void setTestInputText(const QString &text);
     void appendResultPageInfo(const ResultPageInfo &resultPageInfo);
     void appendResultFailure(const QString &message);
     QString currentLanguageLabel() const;
+    QString currentLanguageValue() const;
+    QString currentProblemDetailText() const;
+    QString currentSourceCode() const;
+    QString currentTestInput() const;
+    QString currentTestOutput() const;
     void setFavoriteEnabled(bool enabled);
     void setSubmitEnabled(bool enabled);
 
 signals:
     void backRequested();
     void favoriteRequested();
+    void aiAskRequested(const QString &question);
     void testRequested(const QString &languageLabel,
                        const QString &sourceText,
                        const QString &stdinText);
@@ -59,8 +72,11 @@ signals:
 
 private:
     void setToolsExpanded(bool expanded);
+    void setAiPanelVisible(bool visible);
     void setResultTab(bool showTestTab);
     void resetSubmitPanel();
+    void appendAiTranscriptBlock(const QString &title, const QString &body);
+    void refreshAiResponseView();
 
     QLabel *m_titleLabel = nullptr;
     QFrame *m_toolsFrame = nullptr;
@@ -69,15 +85,23 @@ private:
     QWidget *m_collapsedToolsPanel = nullptr;
     QPushButton *m_backToolButton = nullptr;
     QPushButton *m_favoriteToolButton = nullptr;
+    QPushButton *m_aiToolButton = nullptr;
     QPushButton *m_collapsedBackButton = nullptr;
     QPushButton *m_collapsedFavoriteButton = nullptr;
+    QPushButton *m_collapsedAiButton = nullptr;
     QTextEdit *m_detailTextEdit = nullptr;
+    QFrame *m_aiFrame = nullptr;
+    QLabel *m_aiConfigLabel = nullptr;
+    QPlainTextEdit *m_aiPromptEdit = nullptr;
+    QPushButton *m_aiAskButton = nullptr;
+    QTextEdit *m_aiResponseTextEdit = nullptr;
     QComboBox *m_languageComboBox = nullptr;
     QPlainTextEdit *m_codeEdit = nullptr;
     QPushButton *m_submitButton = nullptr;
     QPushButton *m_inputButton = nullptr;
     QPushButton *m_testTabButton = nullptr;
     QPushButton *m_submitTabButton = nullptr;
+    QSplitter *m_workspaceSplitter = nullptr;
     QSplitter *m_submitPaneSplitter = nullptr;
     QStackedWidget *m_resultStack = nullptr;
     QSplitter *m_testPaneSplitter = nullptr;
@@ -87,4 +111,8 @@ private:
     QString m_lastSubmitPreview;
     bool m_toolsExpanded = true;
     bool m_testing = false;
+    bool m_aiPanelVisible = false;
+    bool m_aiThinking = false;
+    QString m_aiTranscript;
+    QString m_aiResponseBuffer;
 };

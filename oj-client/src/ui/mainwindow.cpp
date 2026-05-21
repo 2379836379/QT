@@ -1,7 +1,9 @@
 #include "mainwindow.h"
 #include "ui_mainwindow.h"
 
+#include "config/appconfig.h"
 #include "network/cookiestore.h"
+#include "network/openaiclient.h"
 #include "network/openjudgeclient.h"
 #include "parser/loginparser.h"
 #include "repository/cache/classcacherepository.h"
@@ -23,6 +25,7 @@
 #include "service/cache/cacheservice.h"
 #include "service/favorite/favoriteproblemservice.h"
 #include "service/app/applicationsizeservice.h"
+#include "service/ai/aiservice.h"
 #include "service/login/loginservice.h"
 #include "service/login/emailverifyservice.h"
 #include "service/login/logincacheservice.h"
@@ -31,6 +34,7 @@
 #include "service/submit/submitservice.h"
 #include "ui/pages/classpage.h"
 #include "ui/pages/contestpage.h"
+#include "ui/pages/aiconfigpage.h"
 #include "ui/pages/favoritepage.h"
 #include "ui/pages/homepage.h"
 #include "ui/pages/loginpage.h"
@@ -182,6 +186,36 @@ QString formatJudgeRequest(const QString &language,
              truncatedText(stdinText),
              truncatedText(sourceText));
 }
+
+QString formatSubmitResponse(const NetworkResult &result)
+{
+    const QJsonDocument document = QJsonDocument::fromJson(result.body);
+    QString redirectUrl;
+    if (document.isObject()) {
+        redirectUrl = document.object().value("redirect").toString();
+    }
+
+    QString text = QString(
+                       "Submit Response\n"
+                       "HTTP status: %1\n"
+                       "Network OK: %2\n"
+                       "Request URL: %3\n"
+                       "Final URL: %4")
+                       .arg(QString::number(result.statusCode),
+                            result.ok ? "true" : "false",
+                            result.requestUrl.toString(),
+                            result.finalUrl.toString());
+    if (!redirectUrl.isEmpty()) {
+        text += "\nRedirect: " + redirectUrl;
+    }
+    if (!result.body.trimmed().isEmpty()) {
+        text += "\n\nRaw JSON:\n"
+                + QString::fromUtf8(document.isObject()
+                                        ? document.toJson(QJsonDocument::Indented)
+                                        : result.body);
+    }
+    return text;
+}
 }
 
 MainWindow::MainWindow(QWidget *parent)
@@ -191,6 +225,7 @@ MainWindow::MainWindow(QWidget *parent)
     ui->setupUi(this);
 
     m_client = new OpenJudgeClient(this);
+    m_openAiClient = new OpenAiClient(this);
     m_cookieStore = new CookieStore(m_client);
     m_client->setCookieStore(m_cookieStore);
 
@@ -216,6 +251,73 @@ MainWindow::MainWindow(QWidget *parent)
     m_loginCacheService = new LoginCacheService(m_loginCacheRepository, this);
     m_emailVerifyService = new EmailVerifyService(this);
     m_applicationSizeService = new ApplicationSizeService(this);
+    const OpenAiConfig openAiConfig = AppConfig::loadOpenAiConfig();
+    m_openAiClient->setBaseUrl(openAiConfig.baseUrl);
+    m_aiService = new AiService(m_openAiClient, this);
+    m_aiService->setConfig(openAiConfig);
+    m_aiService->setToolContext(AiToolContext{
+        [this]() { return m_problemPage->currentProblemDetailText(); },
+        [this]() {
+            const QString label = m_problemPage->currentLanguageLabel();
+            const QString value = m_problemPage->currentLanguageValue();
+            if (label.isEmpty() && value.isEmpty()) {
+                return QString();
+            }
+            return QString("label: %1\nvalue: %2")
+                .arg(label.isEmpty() ? "<none>" : label,
+                     value.isEmpty() ? "<none>" : value);
+        },
+        [this]() { return m_problemPage->currentSourceCode(); },
+        [this]() { return m_problemPage->currentTestInput(); },
+        [this]() { return m_problemPage->currentTestOutput(); },
+        [this](const QString &text) { m_problemPage->setSourceCodeText(text); },
+        [this](const QString &text) { m_problemPage->setTestInputText(text); },
+        [this](const QString &callId, const QString &stdinText) {
+            m_pendingAiRunTestCallId = callId;
+            const QString language =
+                normalizeJudgeLanguage(m_problemPage->currentLanguageLabel());
+            const QString sourceText = m_problemPage->currentSourceCode();
+            if (language.isEmpty()) {
+                m_aiService->failToolCall(callId, "No language selected.");
+                return;
+            }
+            if (sourceText.trimmed().isEmpty()) {
+                m_aiService->failToolCall(callId, "Source code is empty.");
+                return;
+            }
+
+            m_problemPage->setTestInputText(stdinText);
+            m_lastTestRequestLog = formatJudgeRequest(
+                language,
+                judgeFileNameForLanguage(language),
+                sourceText,
+                stdinText);
+            m_problemPage->showTesting(true);
+            m_problemPage->showTestResult(m_lastTestRequestLog + "\n\nRunning test...");
+            m_client->judgeSource(language,
+                                  judgeFileNameForLanguage(language),
+                                  sourceText.toUtf8(),
+                                  stdinText.toUtf8());
+        },
+        [this](const QString &callId) {
+            m_pendingAiSubmitCallId = callId;
+            const QString languageValue = m_problemPage->currentLanguageValue();
+            const QString sourceText = m_problemPage->currentSourceCode();
+            if (languageValue.trimmed().isEmpty()) {
+                m_aiService->failToolCall(callId, "No language selected.");
+                return;
+            }
+            if (sourceText.trimmed().isEmpty()) {
+                m_aiService->failToolCall(callId, "Source code is empty.");
+                return;
+            }
+            m_submitService->submitSolution(languageValue, sourceText);
+        }});
+    m_aiConfigSummary = QString("Config: %1 | model: %2")
+                            .arg(openAiConfig.sourcePath.isEmpty()
+                                     ? QString("defaults")
+                                     : openAiConfig.sourcePath,
+                                 openAiConfig.model);
     m_homeService = new HomeService(m_homeRepository, m_homeCacheRepository, this);
     m_classService = new ClassService(
         m_classRepository, m_classCacheRepository, this);
@@ -255,6 +357,7 @@ void MainWindow::setupUiState()
 {
     m_loginPage = new LoginPage(this);
     m_homePage = new HomePage(this);
+    m_aiConfigPage = new AiConfigPage(this);
     m_classPage = new ClassPage(this);
     m_contestPage = new ContestPage(this);
     m_problemPage = new ProblemPage(this);
@@ -263,6 +366,7 @@ void MainWindow::setupUiState()
 
     ui->pageStack->addWidget(m_loginPage);
     ui->pageStack->addWidget(m_homePage);
+    ui->pageStack->addWidget(m_aiConfigPage);
     ui->pageStack->addWidget(m_classPage);
     ui->pageStack->addWidget(m_contestPage);
     ui->pageStack->addWidget(m_problemPage);
@@ -276,6 +380,10 @@ void MainWindow::setupUiState()
         }
     }
     applyLoginCacheState(m_loginPage->email());
+    m_problemPage->setAiConfigSummary(m_aiConfigSummary);
+    QString configPath;
+    m_aiConfigPage->setConfigText(configPath = m_aiService->config().sourcePath,
+                                  AppConfig::loadConfigText(&configPath));
 
     showRootPage(m_loginPage);
 }
@@ -452,6 +560,16 @@ void MainWindow::connectSignals()
         });
     connect(
         m_homePage,
+        &HomePage::aiConfigRequested,
+        this,
+        [this]() {
+            QString configPath;
+            const QString configText = AppConfig::loadConfigText(&configPath);
+            m_aiConfigPage->setConfigText(configPath, configText);
+            pushPage(m_aiConfigPage);
+        });
+    connect(
+        m_homePage,
         &HomePage::logoutRequested,
         this,
         [this]() {
@@ -500,6 +618,17 @@ void MainWindow::connectSignals()
         &ProblemPage::favoriteRequested,
         this,
         &MainWindow::saveCurrentProblemToFavorites);
+    connect(
+        m_problemPage,
+        &ProblemPage::aiAskRequested,
+        this,
+        [this](const QString &question) {
+            m_aiService->ask(question,
+                             m_problemPage->currentProblemDetailText(),
+                             m_problemPage->currentSourceCode(),
+                             m_problemPage->currentTestInput(),
+                             m_problemPage->currentTestOutput());
+        });
     connect(
         m_problemPage,
         &ProblemPage::testRequested,
@@ -614,6 +743,29 @@ void MainWindow::connectSignals()
                 m_favoriteProblemService->loadFavoritesInFolder(folderId));
         });
     connect(m_storagePage, &StoragePage::backRequested, this, &MainWindow::popPage);
+    connect(m_aiConfigPage, &AiConfigPage::backRequested, this, &MainWindow::popPage);
+    connect(
+        m_aiConfigPage,
+        &AiConfigPage::saveRequested,
+        this,
+        [this](const QString &content) {
+            QString errorMessage;
+            QString savedPath;
+            if (!AppConfig::saveConfigText(content, &savedPath, &errorMessage)) {
+                m_aiConfigPage->showSaveFailed(errorMessage);
+                return;
+            }
+            OpenAiConfig savedConfig = AppConfig::loadOpenAiConfig();
+            m_openAiClient->setBaseUrl(savedConfig.baseUrl);
+            m_aiService->setConfig(savedConfig);
+            m_aiConfigSummary = QString("Config: %1 | model: %2")
+                                    .arg(savedConfig.sourcePath.isEmpty()
+                                             ? QString("defaults")
+                                             : savedConfig.sourcePath,
+                                         savedConfig.model);
+            m_problemPage->setAiConfigSummary(m_aiConfigSummary);
+            m_aiConfigPage->showSaveSucceeded(savedPath);
+        });
     connect(
         m_storagePage,
         &StoragePage::clearCacheRequested,
@@ -631,20 +783,57 @@ void MainWindow::connectSignals()
         });
 
     connect(
+        m_aiService,
+        &AiService::responseDelta,
+        this,
+        [this](const QString &delta) {
+            m_problemPage->appendAiResponse(delta);
+        });
+    connect(
+        m_aiService,
+        &AiService::thinkingChanged,
+        this,
+        [this](bool thinking) {
+            m_problemPage->showAiThinking(thinking);
+        });
+    connect(
+        m_aiService,
+        &AiService::responseReady,
+        this,
+        [this](const QString &text) {
+            m_problemPage->showAiResponse(text);
+        });
+    connect(
+        m_aiService,
+        &AiService::failed,
+        this,
+        [this](const QString &message) {
+            m_problemPage->showAiFailed(message);
+        });
+    connect(
         m_client,
         &OpenJudgeClient::judgeFinished,
         this,
         [this](const NetworkResult &result) {
             m_problemPage->showTesting(false);
+            const QString toolResultText = m_lastTestRequestLog + "\n\n" + formatJudgeResult(result);
             if (!result.ok) {
-                m_problemPage->showTestFailed(
+                const QString failureText =
                     m_lastTestRequestLog
                     + QString("\n\nJudge Response\nHTTP status: %1\nNetwork error: %2")
-                          .arg(QString::number(result.statusCode), result.errorString));
+                          .arg(QString::number(result.statusCode), result.errorString);
+                m_problemPage->showTestFailed(failureText);
+                if (!m_pendingAiRunTestCallId.isEmpty()) {
+                    m_aiService->failToolCall(m_pendingAiRunTestCallId, failureText);
+                    m_pendingAiRunTestCallId.clear();
+                }
                 return;
             }
-            m_problemPage->showTestResult(
-                m_lastTestRequestLog + "\n\n" + formatJudgeResult(result));
+            m_problemPage->showTestResult(toolResultText);
+            if (!m_pendingAiRunTestCallId.isEmpty()) {
+                m_aiService->completeToolCall(m_pendingAiRunTestCallId, toolResultText);
+                m_pendingAiRunTestCallId.clear();
+            }
         });
     connect(
         m_favoriteProblemService,
@@ -733,6 +922,12 @@ void MainWindow::connectSignals()
             }
 
             m_problemPage->showSubmitResult(result);
+            if (!m_pendingAiSubmitCallId.isEmpty()) {
+                m_aiService->completeToolCall(
+                    m_pendingAiSubmitCallId,
+                    formatSubmitResponse(result));
+                m_pendingAiSubmitCallId.clear();
+            }
             if (!redirectUrl.isEmpty()) {
                 m_resultService->openResult(QUrl(redirectUrl));
             }
@@ -743,6 +938,12 @@ void MainWindow::connectSignals()
         this,
         [this](const QString &message) {
             m_problemPage->showSubmitFailed(message);
+            if (!m_pendingAiSubmitCallId.isEmpty()) {
+                m_aiService->failToolCall(
+                    m_pendingAiSubmitCallId,
+                    QString("Submit failed.\n%1").arg(message));
+                m_pendingAiSubmitCallId.clear();
+            }
         });
 
     connect(

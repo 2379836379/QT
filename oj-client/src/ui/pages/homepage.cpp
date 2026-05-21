@@ -55,6 +55,8 @@ HomePage::HomePage(QWidget *parent)
     m_favoritesButton->setObjectName("homeToolButton");
     m_storageButton = new QPushButton("Storage", m_toolsPanel);
     m_storageButton->setObjectName("homeToolButton");
+    m_aiConfigButton = new QPushButton("AI Config", m_toolsPanel);
+    m_aiConfigButton->setObjectName("homeToolButton");
     m_logoutButton = new QPushButton("Log Out", m_toolsPanel);
     m_logoutButton->setObjectName("homeToolButton");
 
@@ -70,17 +72,22 @@ HomePage::HomePage(QWidget *parent)
     m_collapsedStorageButton = new QPushButton("S", m_collapsedToolsPanel);
     m_collapsedStorageButton->setObjectName("homeToolIconButton");
     m_collapsedStorageButton->setToolTip("Storage");
+    m_collapsedAiConfigButton = new QPushButton("A", m_collapsedToolsPanel);
+    m_collapsedAiConfigButton->setObjectName("homeToolIconButton");
+    m_collapsedAiConfigButton->setToolTip("AI Config");
     m_collapsedLogoutButton = new QPushButton("L", m_collapsedToolsPanel);
     m_collapsedLogoutButton->setObjectName("homeToolIconButton");
     m_collapsedLogoutButton->setToolTip("Log Out");
 
     collapsedLayout->addWidget(m_collapsedFavoritesButton);
     collapsedLayout->addWidget(m_collapsedStorageButton);
+    collapsedLayout->addWidget(m_collapsedAiConfigButton);
     collapsedLayout->addWidget(m_collapsedLogoutButton);
     collapsedLayout->addStretch();
 
     toolsPanelLayout->addWidget(m_favoritesButton);
     toolsPanelLayout->addWidget(m_storageButton);
+    toolsPanelLayout->addWidget(m_aiConfigButton);
     toolsPanelLayout->addWidget(m_logoutButton);
     toolsPanelLayout->addStretch();
 
@@ -229,9 +236,11 @@ HomePage::HomePage(QWidget *parent)
         });
     connect(m_favoritesButton, &QPushButton::clicked, this, &HomePage::favoritesRequested);
     connect(m_storageButton, &QPushButton::clicked, this, &HomePage::storageRequested);
+    connect(m_aiConfigButton, &QPushButton::clicked, this, &HomePage::aiConfigRequested);
     connect(m_logoutButton, &QPushButton::clicked, this, &HomePage::logoutRequested);
     connect(m_collapsedFavoritesButton, &QPushButton::clicked, this, &HomePage::favoritesRequested);
     connect(m_collapsedStorageButton, &QPushButton::clicked, this, &HomePage::storageRequested);
+    connect(m_collapsedAiConfigButton, &QPushButton::clicked, this, &HomePage::aiConfigRequested);
     connect(m_collapsedLogoutButton, &QPushButton::clicked, this, &HomePage::logoutRequested);
     connect(
         m_toolsToggleButton,
@@ -269,6 +278,7 @@ void HomePage::setToolsExpanded(bool expanded)
     }
     const QList<QPushButton *> iconButtons = {m_collapsedFavoritesButton,
                                               m_collapsedStorageButton,
+                                              m_collapsedAiConfigButton,
                                               m_collapsedLogoutButton};
     for (QPushButton *button : iconButtons) {
         if (button != nullptr) {

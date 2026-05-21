@@ -13,6 +13,8 @@ qt_add_executable(oj
     src/ui/mainwindow.ui
     src/ui/pages/loginpage.cpp
     src/ui/pages/loginpage.h
+    src/ui/pages/aiconfigpage.cpp
+    src/ui/pages/aiconfigpage.h
     src/ui/pages/homepage.cpp
     src/ui/pages/homepage.h
     src/ui/pages/classpage.cpp
@@ -25,8 +27,12 @@ qt_add_executable(oj
     src/ui/pages/favoritepage.h
     src/ui/pages/storagepage.cpp
     src/ui/pages/storagepage.h
+    src/config/appconfig.cpp
+    src/config/appconfig.h
     src/network/cookiestore.cpp
     src/network/cookiestore.h
+    src/network/openaiclient.cpp
+    src/network/openaiclient.h
     src/network/openjudgeclient.cpp
     src/network/openjudgeclient.h
     src/parser/loginparser.cpp
@@ -79,6 +85,8 @@ qt_add_executable(oj
     src/service/browse/problemservice.h
     src/service/app/applicationsizeservice.cpp
     src/service/app/applicationsizeservice.h
+    src/service/ai/aiservice.cpp
+    src/service/ai/aiservice.h
     src/service/cache/cacheservice.cpp
     src/service/cache/cacheservice.h
     src/service/reminder/reminderservice.cpp

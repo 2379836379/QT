@@ -29,16 +29,19 @@ class LoginService;
 class LoginCacheService;
 class EmailVerifyService;
 class ApplicationSizeService;
+class OpenAiClient;
 class HomeService;
 class ClassService;
 class ContestService;
 class ProblemService;
+class AiService;
 class FavoriteProblemService;
 class ResultService;
 class SubmitService;
 class ReminderService;
 class LoginPage;
 class HomePage;
+class AiConfigPage;
 class ClassPage;
 class ContestPage;
 class ProblemPage;
@@ -88,10 +91,12 @@ private:
     LoginCacheService *m_loginCacheService = nullptr;
     EmailVerifyService *m_emailVerifyService = nullptr;
     ApplicationSizeService *m_applicationSizeService = nullptr;
+    OpenAiClient *m_openAiClient = nullptr;
     HomeService *m_homeService = nullptr;
     ClassService *m_classService = nullptr;
     ContestService *m_contestService = nullptr;
     ProblemService *m_problemService = nullptr;
+    AiService *m_aiService = nullptr;
     FavoriteProblemRepository *m_favoriteProblemRepository = nullptr;
     FavoriteProblemService *m_favoriteProblemService = nullptr;
     ResultService *m_resultService = nullptr;
@@ -100,6 +105,7 @@ private:
     ReminderService *m_reminderService = nullptr;
     LoginPage *m_loginPage = nullptr;
     HomePage *m_homePage = nullptr;
+    AiConfigPage *m_aiConfigPage = nullptr;
     ClassPage *m_classPage = nullptr;
     ContestPage *m_contestPage = nullptr;
     ProblemPage *m_problemPage = nullptr;
@@ -112,6 +118,9 @@ private:
     QString m_pendingLoginEmail;
     QString m_pendingLoginPassword;
     QString m_lastTestRequestLog;
+    QString m_aiConfigSummary;
+    QString m_pendingAiRunTestCallId;
+    QString m_pendingAiSubmitCallId;
 };
 
 #endif // MAINWINDOW_H

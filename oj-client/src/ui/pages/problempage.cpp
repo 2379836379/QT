@@ -176,7 +176,7 @@ ProblemPage::ProblemPage(QWidget *parent)
 {
     auto *layout = new QVBoxLayout(this);
     layout->setContentsMargins(0, 0, 0, 0);
-    layout->setSpacing(18);
+    layout->setSpacing(4);
 
     auto *topFrame = new QFrame(this);
     topFrame->setObjectName("problemTopFrame");
@@ -194,7 +194,7 @@ ProblemPage::ProblemPage(QWidget *parent)
     topLayout->addWidget(m_titleLabel, 1);
 
     auto *bottomLayout = new QHBoxLayout();
-    bottomLayout->setSpacing(18);
+    bottomLayout->setSpacing(4);
 
     m_toolsFrame = new QFrame(this);
     m_toolsFrame->setObjectName("problemLeftFrame");
@@ -214,8 +214,11 @@ ProblemPage::ProblemPage(QWidget *parent)
     m_backToolButton->setObjectName("problemToolButton");
     m_favoriteToolButton = new QPushButton("Favorite Current Problem", m_toolsPanel);
     m_favoriteToolButton->setObjectName("problemToolButton");
+    m_aiToolButton = new QPushButton("AI", m_toolsPanel);
+    m_aiToolButton->setObjectName("problemToolButton");
     toolsPanelLayout->addWidget(m_backToolButton);
     toolsPanelLayout->addWidget(m_favoriteToolButton);
+    toolsPanelLayout->addWidget(m_aiToolButton);
     toolsPanelLayout->addStretch();
 
     m_collapsedToolsPanel = new QWidget(m_toolsFrame);
@@ -230,8 +233,12 @@ ProblemPage::ProblemPage(QWidget *parent)
     m_collapsedFavoriteButton = new QPushButton("F", m_collapsedToolsPanel);
     m_collapsedFavoriteButton->setObjectName("problemToolIconButton");
     m_collapsedFavoriteButton->setToolTip("Favorite Current Problem");
+    m_collapsedAiButton = new QPushButton("A", m_collapsedToolsPanel);
+    m_collapsedAiButton->setObjectName("problemToolIconButton");
+    m_collapsedAiButton->setToolTip("AI");
     collapsedLayout->addWidget(m_collapsedBackButton);
     collapsedLayout->addWidget(m_collapsedFavoriteButton);
+    collapsedLayout->addWidget(m_collapsedAiButton);
     collapsedLayout->addStretch();
 
     leftLayout->addWidget(m_toolsToggleButton);
@@ -342,12 +349,54 @@ ProblemPage::ProblemPage(QWidget *parent)
     submitLayout->addWidget(m_languageComboBox);
     submitLayout->addWidget(m_submitPaneSplitter, 1);
 
+    m_aiFrame = new QFrame(this);
+    m_aiFrame->setObjectName("problemAiFrame");
+    auto *aiLayout = new QVBoxLayout(m_aiFrame);
+    aiLayout->setContentsMargins(20, 18, 20, 18);
+    aiLayout->setSpacing(14);
+
+    auto *aiLabel = new QLabel("AI", m_aiFrame);
+    aiLabel->setObjectName("problemSectionLabel");
+    m_aiConfigLabel = new QLabel("Config: using defaults", m_aiFrame);
+    m_aiConfigLabel->setObjectName("problemAiMetaLabel");
+    auto *aiPromptLabel = new QLabel("Prompt", m_aiFrame);
+    aiPromptLabel->setObjectName("problemAiFieldLabel");
+    m_aiPromptEdit = new QPlainTextEdit(m_aiFrame);
+    m_aiPromptEdit->setObjectName("problemCodeEdit");
+    m_aiPromptEdit->setPlaceholderText("Ask AI about the current problem, code, or test result.");
+    m_aiPromptEdit->setMinimumHeight(120);
+    m_aiAskButton = new QPushButton("Ask AI", m_aiFrame);
+    m_aiAskButton->setObjectName("problemSubmitButton");
+    auto *aiResponseLabel = new QLabel("Response", m_aiFrame);
+    aiResponseLabel->setObjectName("problemAiFieldLabel");
+    m_aiResponseTextEdit = new QTextEdit(m_aiFrame);
+    m_aiResponseTextEdit->setObjectName("problemResultText");
+    m_aiResponseTextEdit->setReadOnly(true);
+    m_aiResponseTextEdit->setPlaceholderText("AI response will appear here.");
+    aiLayout->addWidget(aiLabel);
+    aiLayout->addWidget(m_aiConfigLabel);
+    aiLayout->addWidget(aiPromptLabel);
+    aiLayout->addWidget(m_aiPromptEdit);
+    aiLayout->addWidget(m_aiAskButton, 0, Qt::AlignRight);
+    aiLayout->addWidget(aiResponseLabel);
+    aiLayout->addWidget(m_aiResponseTextEdit, 1);
+    m_aiFrame->hide();
+
     auto *contentSplitter = new QSplitter(Qt::Horizontal, this);
     contentSplitter->setObjectName("problemContentSplitter");
     contentSplitter->setChildrenCollapsible(false);
-    contentSplitter->setHandleWidth(10);
+    contentSplitter->setHandleWidth(4);
     contentSplitter->addWidget(problemFrame);
-    contentSplitter->addWidget(submitFrame);
+    m_workspaceSplitter = new QSplitter(Qt::Horizontal, contentSplitter);
+    m_workspaceSplitter->setObjectName("problemWorkspaceSplitter");
+    m_workspaceSplitter->setChildrenCollapsible(false);
+    m_workspaceSplitter->setHandleWidth(4);
+    m_workspaceSplitter->addWidget(submitFrame);
+    m_workspaceSplitter->addWidget(m_aiFrame);
+    m_workspaceSplitter->setStretchFactor(0, 4);
+    m_workspaceSplitter->setStretchFactor(1, 2);
+    m_workspaceSplitter->setSizes({720, 0});
+    contentSplitter->addWidget(m_workspaceSplitter);
     contentSplitter->setStretchFactor(0, 1);
     contentSplitter->setStretchFactor(1, 1);
     contentSplitter->setSizes({640, 640});
@@ -360,7 +409,7 @@ ProblemPage::ProblemPage(QWidget *parent)
 
     setStyleSheet(
         "ProblemPage { background: #f3f1eb; }"
-        "#problemTopFrame, #problemLeftFrame, #problemMiddleFrame, #problemRightFrame {"
+        "#problemTopFrame, #problemLeftFrame, #problemMiddleFrame, #problemRightFrame, #problemAiFrame {"
         "  background: #fbfaf7;"
         "  border: 1px solid #ded8cc;"
         "  border-radius: 16px;"
@@ -375,6 +424,12 @@ ProblemPage::ProblemPage(QWidget *parent)
         "  background: transparent;"
         "}"
         "#problemSubmitPaneSplitter::handle:hover {"
+        "  background: rgba(18, 52, 59, 0.08);"
+        "}"
+        "#problemWorkspaceSplitter::handle {"
+        "  background: transparent;"
+        "}"
+        "#problemWorkspaceSplitter::handle:hover {"
         "  background: rgba(18, 52, 59, 0.08);"
         "}"
         "#problemTestPaneSplitter::handle {"
@@ -392,6 +447,9 @@ ProblemPage::ProblemPage(QWidget *parent)
         "  font-size: 16px;"
         "  font-weight: 600;"
         "  color: #2f3a33;"
+        "}"
+        "#problemAiMetaLabel, #problemAiFieldLabel {"
+        "  color: #526056;"
         "}"
         "#problemToolsToggleButton {"
         "  background: transparent;"
@@ -466,6 +524,12 @@ ProblemPage::ProblemPage(QWidget *parent)
     connect(m_collapsedBackButton, &QPushButton::clicked, this, &ProblemPage::backRequested);
     connect(m_favoriteToolButton, &QPushButton::clicked, this, &ProblemPage::favoriteRequested);
     connect(m_collapsedFavoriteButton, &QPushButton::clicked, this, &ProblemPage::favoriteRequested);
+    connect(m_aiToolButton, &QPushButton::clicked, this, [this]() {
+        setAiPanelVisible(!m_aiPanelVisible);
+    });
+    connect(m_collapsedAiButton, &QPushButton::clicked, this, [this]() {
+        setAiPanelVisible(!m_aiPanelVisible);
+    });
     connect(
         m_toolsToggleButton,
         &QPushButton::clicked,
@@ -473,6 +537,14 @@ ProblemPage::ProblemPage(QWidget *parent)
         [this]() {
             setToolsExpanded(!m_toolsExpanded);
         });
+    connect(m_aiAskButton, &QPushButton::clicked, this, [this]() {
+        const QString question = m_aiPromptEdit->toPlainText().trimmed();
+        if (!question.isEmpty()) {
+            appendAiTranscriptBlock("User", question);
+            refreshAiResponseView();
+        }
+        emit aiAskRequested(question);
+    });
     connect(
         m_inputButton,
         &QPushButton::clicked,
@@ -525,7 +597,8 @@ void ProblemPage::setToolsExpanded(bool expanded)
         m_collapsedToolsPanel->setVisible(!expanded);
     }
     const QList<QPushButton *> iconButtons = {m_collapsedBackButton,
-                                              m_collapsedFavoriteButton};
+                                              m_collapsedFavoriteButton,
+                                              m_collapsedAiButton};
     for (QPushButton *button : iconButtons) {
         if (button != nullptr) {
             button->setVisible(!expanded);
@@ -534,6 +607,35 @@ void ProblemPage::setToolsExpanded(bool expanded)
     if (m_toolsToggleButton != nullptr) {
         m_toolsToggleButton->setText(expanded ? "Tools v" : ">");
     }
+}
+
+void ProblemPage::setAiPanelVisible(bool visible)
+{
+    m_aiPanelVisible = visible;
+    if (m_workspaceSplitter == nullptr || m_workspaceSplitter->count() < 2
+        || m_aiFrame == nullptr) {
+        return;
+    }
+
+    QList<int> sizes = m_workspaceSplitter->sizes();
+    if (sizes.size() < 2) {
+        sizes = {720, 0};
+    }
+
+    if (visible) {
+        m_aiFrame->show();
+        if (sizes.at(1) <= 0) {
+            sizes[0] = qMax(420, sizes.at(0));
+            sizes[1] = 320;
+        }
+    } else {
+        sizes[0] += sizes[1];
+        sizes[1] = 0;
+        m_workspaceSplitter->setSizes(sizes);
+        m_aiFrame->hide();
+        return;
+    }
+    m_workspaceSplitter->setSizes(sizes);
 }
 
 void ProblemPage::setResultTab(bool showTestTab)
@@ -565,6 +667,9 @@ void ProblemPage::openProblem(const QString &problemTitle)
     m_titleLabel->setText(problemTitle.isEmpty() ? "Problem" : problemTitle);
     m_detailTextEdit->setPlainText("Loading problem detail...");
     resetSubmitPanel();
+    m_aiTranscript.clear();
+    m_aiResponseBuffer.clear();
+    refreshAiResponseView();
     setFavoriteEnabled(false);
     setSubmitEnabled(false);
 }
@@ -686,6 +791,86 @@ void ProblemPage::showSubmitFailed(const QString &message)
     m_submitResultTextEdit->setPlainText(message);
 }
 
+void ProblemPage::setAiConfigSummary(const QString &summary)
+{
+    if (m_aiConfigLabel != nullptr) {
+        m_aiConfigLabel->setText(summary);
+    }
+}
+
+void ProblemPage::showAiThinking(bool thinking)
+{
+    m_aiThinking = thinking;
+    if (m_aiAskButton != nullptr) {
+        m_aiAskButton->setEnabled(!thinking);
+        m_aiAskButton->setText(thinking ? "Asking..." : "Ask AI");
+    }
+    if (thinking) {
+        m_aiResponseBuffer.clear();
+        appendAiTranscriptBlock("Assistant", "Waiting for OpenAI response...");
+        refreshAiResponseView();
+    }
+}
+
+void ProblemPage::appendAiResponse(const QString &delta)
+{
+    m_aiResponseBuffer += delta;
+    const QString waitingBlock = "Assistant\nWaiting for OpenAI response...";
+    if (m_aiTranscript.endsWith(waitingBlock)) {
+        m_aiTranscript.chop(waitingBlock.size());
+        m_aiTranscript += "Assistant\n" + m_aiResponseBuffer;
+    } else {
+        const QString assistantPrefix = "Assistant\n";
+        const int assistantIndex = m_aiTranscript.lastIndexOf(assistantPrefix);
+        if (assistantIndex >= 0) {
+            m_aiTranscript = m_aiTranscript.left(assistantIndex) + assistantPrefix
+                             + m_aiResponseBuffer;
+        } else {
+            appendAiTranscriptBlock("Assistant", m_aiResponseBuffer);
+        }
+    }
+    refreshAiResponseView();
+}
+
+void ProblemPage::showAiResponse(const QString &text)
+{
+    m_aiResponseBuffer = text;
+    const QString assistantPrefix = "Assistant\n";
+    const int assistantIndex = m_aiTranscript.lastIndexOf(assistantPrefix);
+    if (assistantIndex >= 0) {
+        m_aiTranscript = m_aiTranscript.left(assistantIndex) + assistantPrefix + text;
+    } else {
+        appendAiTranscriptBlock("Assistant", text);
+    }
+    refreshAiResponseView();
+}
+
+void ProblemPage::showAiFailed(const QString &message)
+{
+    const QString assistantPrefix = "Assistant\n";
+    const int assistantIndex = m_aiTranscript.lastIndexOf(assistantPrefix);
+    if (assistantIndex >= 0) {
+        m_aiTranscript = m_aiTranscript.left(assistantIndex) + assistantPrefix + message;
+    } else {
+        appendAiTranscriptBlock("Assistant", message);
+    }
+    refreshAiResponseView();
+}
+
+void ProblemPage::setSourceCodeText(const QString &text)
+{
+    if (m_codeEdit != nullptr) {
+        m_codeEdit->setPlainText(text);
+    }
+}
+
+void ProblemPage::setTestInputText(const QString &text)
+{
+    if (m_testInputTextEdit != nullptr) {
+        m_testInputTextEdit->setPlainText(text);
+    }
+}
+
 void ProblemPage::appendResultPageInfo(const ResultPageInfo &resultPageInfo)
 {
     setResultTab(false);
@@ -701,6 +886,31 @@ void ProblemPage::appendResultFailure(const QString &message)
 QString ProblemPage::currentLanguageLabel() const
 {
     return m_languageComboBox->currentText();
+}
+
+QString ProblemPage::currentLanguageValue() const
+{
+    return m_languageComboBox->currentData().toString();
+}
+
+QString ProblemPage::currentProblemDetailText() const
+{
+    return m_detailTextEdit == nullptr ? QString() : m_detailTextEdit->toPlainText();
+}
+
+QString ProblemPage::currentSourceCode() const
+{
+    return m_codeEdit == nullptr ? QString() : m_codeEdit->toPlainText();
+}
+
+QString ProblemPage::currentTestInput() const
+{
+    return m_testInputTextEdit == nullptr ? QString() : m_testInputTextEdit->toPlainText();
+}
+
+QString ProblemPage::currentTestOutput() const
+{
+    return m_testResultTextEdit == nullptr ? QString() : m_testResultTextEdit->toPlainText();
 }
 
 void ProblemPage::setFavoriteEnabled(bool enabled)
@@ -739,4 +949,23 @@ void ProblemPage::resetSubmitPanel()
     m_submitResultTextEdit->setPlainText("Preparing submit options...");
     setResultTab(true);
     m_lastSubmitPreview.clear();
+}
+
+void ProblemPage::appendAiTranscriptBlock(const QString &title, const QString &body)
+{
+    if (!m_aiTranscript.isEmpty()) {
+        m_aiTranscript += "\n\n";
+    }
+    m_aiTranscript += title + "\n" + body;
+}
+
+void ProblemPage::refreshAiResponseView()
+{
+    if (m_aiResponseTextEdit != nullptr) {
+        if (m_aiTranscript.isEmpty()) {
+            m_aiResponseTextEdit->clear();
+        } else {
+            m_aiResponseTextEdit->setPlainText(m_aiTranscript);
+        }
+    }
 }

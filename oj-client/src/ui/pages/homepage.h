@@ -32,6 +32,7 @@ signals:
     void classSelected(const QString &name, const QString &url);
     void favoritesRequested();
     void storageRequested();
+    void aiConfigRequested();
     void logoutRequested();
     void reminderSelected(const QString &title, const QString &url);
 
@@ -46,9 +47,11 @@ private:
     QWidget *m_collapsedToolsPanel = nullptr;
     QPushButton *m_favoritesButton = nullptr;
     QPushButton *m_storageButton = nullptr;
+    QPushButton *m_aiConfigButton = nullptr;
     QPushButton *m_logoutButton = nullptr;
     QPushButton *m_collapsedFavoritesButton = nullptr;
     QPushButton *m_collapsedStorageButton = nullptr;
+    QPushButton *m_collapsedAiConfigButton = nullptr;
     QPushButton *m_collapsedLogoutButton = nullptr;
     QListWidget *m_reminderListWidget = nullptr;
     bool m_toolsExpanded = true;
