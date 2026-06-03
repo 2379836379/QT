@@ -1,21 +1,498 @@
 #include "ui/pages/problempage.h"
 
 #include <QComboBox>
+#include <QCoreApplication>
+#include <QDateTime>
+#include <QDir>
+#include <QFile>
 #include <QFrame>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QListWidget>
 #include <QListWidgetItem>
+#include <QPainter>
 #include <QPlainTextEdit>
 #include <QPushButton>
+#include <QRect>
 #include <QRegularExpression>
+#include <QKeyEvent>
+#include <QSignalBlocker>
 #include <QSplitter>
 #include <QStackedWidget>
+#include <QSyntaxHighlighter>
+#include <QTextCharFormat>
 #include <QTextEdit>
+#include <QTextBlock>
+#include <QTextStream>
+#include <QTimer>
 #include <QVBoxLayout>
 
 namespace
 {
+bool g_problemPageDarkMode = false;
+
+void writeStartupLog(const QString &message)
+{
+    QDir dir(QCoreApplication::applicationDirPath());
+    if (dir.dirName().compare("build", Qt::CaseInsensitive) == 0) {
+        dir.cdUp();
+    }
+    dir.mkpath("data");
+
+    QFile file(dir.filePath("data/startup.log"));
+    if (!file.open(QIODevice::Append | QIODevice::Text)) {
+        return;
+    }
+
+    QTextStream stream(&file);
+    stream << QDateTime::currentDateTime().toString("yyyy-MM-dd HH:mm:ss.zzz")
+           << " | " << message << '\n';
+}
+
+class IdeCodeEditor;
+
+class LineNumberArea final : public QWidget
+{
+public:
+    explicit LineNumberArea(IdeCodeEditor *editor);
+
+    QSize sizeHint() const override;
+
+protected:
+    void paintEvent(QPaintEvent *event) override;
+
+private:
+    IdeCodeEditor *m_editor = nullptr;
+};
+
+class IdeCodeEditor final : public QPlainTextEdit
+{
+public:
+    explicit IdeCodeEditor(QWidget *parent = nullptr) : QPlainTextEdit(parent)
+    {
+        m_lineNumberArea = new LineNumberArea(this);
+
+        connect(this,
+                &QPlainTextEdit::blockCountChanged,
+                this,
+                [this](int) { updateLineNumberAreaWidth(); });
+        connect(this,
+                &QPlainTextEdit::updateRequest,
+                this,
+                [this](const QRect &rect, int dy) {
+                    if (dy != 0) {
+                        m_lineNumberArea->scroll(0, dy);
+                    } else {
+                        m_lineNumberArea->update(
+                            0, rect.y(), m_lineNumberArea->width(), rect.height());
+                    }
+
+                    if (rect.contains(viewport()->rect())) {
+                        updateLineNumberAreaWidth();
+                    }
+                });
+
+        updateLineNumberAreaWidth();
+    }
+
+    int lineNumberAreaWidth() const
+    {
+        int digits = 1;
+        int maxValue = qMax(1, blockCount());
+        while (maxValue >= 10) {
+            maxValue /= 10;
+            ++digits;
+        }
+        return 16 + fontMetrics().horizontalAdvance(QLatin1Char('9')) * digits;
+    }
+
+    void updateLineNumberAreaWidth()
+    {
+        setViewportMargins(lineNumberAreaWidth(), 0, 0, 0);
+    }
+
+    void lineNumberAreaPaintEvent(QPaintEvent *event)
+    {
+        QPainter painter(m_lineNumberArea);
+        painter.fillRect(event->rect(),
+                         g_problemPageDarkMode ? QColor("#121920")
+                                               : QColor("#f4f6f8"));
+        painter.setPen(g_problemPageDarkMode ? QColor("#7f8b97")
+                                             : QColor("#8a94a1"));
+
+        QTextBlock block = firstVisibleBlock();
+        int blockNumber = block.blockNumber();
+        int top = qRound(blockBoundingGeometry(block).translated(contentOffset()).top());
+        int bottom = top + qRound(blockBoundingRect(block).height());
+
+        while (block.isValid() && top <= event->rect().bottom()) {
+            if (block.isVisible() && bottom >= event->rect().top()) {
+                const QString number = QString::number(blockNumber + 1);
+                painter.drawText(0,
+                                 top,
+                                 m_lineNumberArea->width() - 8,
+                                 fontMetrics().height(),
+                                 Qt::AlignRight,
+                                 number);
+            }
+
+            block = block.next();
+            top = bottom;
+            bottom = top + qRound(blockBoundingRect(block).height());
+            ++blockNumber;
+        }
+    }
+
+protected:
+    void keyPressEvent(QKeyEvent *event) override
+    {
+        if (event == nullptr) {
+            QPlainTextEdit::keyPressEvent(event);
+            return;
+        }
+
+        if ((event->key() == Qt::Key_Return || event->key() == Qt::Key_Enter)
+            && event->modifiers() == Qt::NoModifier) {
+            QTextCursor cursor = textCursor();
+            const QString blockText = cursor.block().text();
+            const int positionInBlock = cursor.position() - cursor.block().position();
+            const QString beforeCursor = blockText.left(qMax(0, positionInBlock));
+            const QString indent = leadingWhitespace(beforeCursor);
+            const QString trimmedBeforeCursor = beforeCursor.trimmed();
+
+            if (trimmedBeforeCursor.endsWith('{')) {
+                const QString innerIndent = indent + indentUnit(indent);
+                cursor.insertText("\n" + innerIndent + "\n" + indent);
+                cursor.movePosition(QTextCursor::Up);
+                cursor.movePosition(QTextCursor::EndOfLine);
+                setTextCursor(cursor);
+                return;
+            }
+
+            QString nextIndent = indent;
+            if (endsWithIndentTrigger(trimmedBeforeCursor)) {
+                nextIndent += indentUnit(indent);
+            }
+
+            cursor.insertText("\n" + nextIndent);
+            return;
+        }
+
+        const QString text = event->text();
+        if (text.size() == 1 && !text.at(0).isNull()) {
+            const QChar input = text.at(0);
+            const QString closing = pairedClosingText(input);
+            if (!closing.isEmpty()) {
+                QTextCursor cursor = textCursor();
+                const QString selected = cursor.selectedText();
+                if (!selected.isEmpty()) {
+                    cursor.insertText(QString(input) + selected + closing);
+                    setTextCursor(cursor);
+                    return;
+                }
+
+                cursor.insertText(QString(input) + closing);
+                cursor.movePosition(QTextCursor::Left);
+                setTextCursor(cursor);
+                return;
+            }
+
+            if (isClosingChar(input)) {
+                QTextCursor cursor = textCursor();
+                if (!cursor.hasSelection()) {
+                    cursor.movePosition(QTextCursor::Right,
+                                        QTextCursor::KeepAnchor,
+                                        1);
+                    if (cursor.selectedText() == QString(input)) {
+                        cursor.clearSelection();
+                        setTextCursor(cursor);
+                        return;
+                    }
+                    cursor.clearSelection();
+                }
+            }
+        }
+
+        QPlainTextEdit::keyPressEvent(event);
+    }
+
+    void resizeEvent(QResizeEvent *event) override
+    {
+        QPlainTextEdit::resizeEvent(event);
+        const QRect area = contentsRect();
+        m_lineNumberArea->setGeometry(
+            QRect(area.left(), area.top(), lineNumberAreaWidth(), area.height()));
+    }
+
+private:
+    QString leadingWhitespace(const QString &text) const
+    {
+        QString result;
+        for (const QChar ch : text) {
+            if (ch == ' ' || ch == '\t') {
+                result += ch;
+            } else {
+                break;
+            }
+        }
+        return result;
+    }
+
+    bool endsWithIndentTrigger(const QString &text) const
+    {
+        return text.endsWith('{') || text.endsWith('(') || text.endsWith('[');
+    }
+
+    QString indentUnit(const QString &currentIndent) const
+    {
+        return currentIndent.contains('\t') && !currentIndent.contains(' ')
+            ? QString("\t")
+            : QString("    ");
+    }
+
+    QString pairedClosingText(QChar input) const
+    {
+        switch (input.unicode()) {
+        case '(':
+            return ")";
+        case '[':
+            return "]";
+        case '{':
+            return "}";
+        case '"':
+            return "\"";
+        case '\'':
+            return "'";
+        default:
+            return QString();
+        }
+    }
+
+    bool isClosingChar(QChar input) const
+    {
+        return input == ')' || input == ']' || input == '}' || input == '"'
+               || input == '\'';
+    }
+
+    QWidget *m_lineNumberArea = nullptr;
+};
+
+class CodeSyntaxHighlighter final : public QSyntaxHighlighter
+{
+public:
+    enum class LanguageMode
+    {
+        PlainText,
+        Cpp,
+        Python
+    };
+
+    explicit CodeSyntaxHighlighter(QTextDocument *parent = nullptr)
+        : QSyntaxHighlighter(parent)
+    {
+        setLanguageMode(LanguageMode::Cpp);
+    }
+
+    void setLanguageMode(LanguageMode mode)
+    {
+        if (m_languageMode == mode) {
+            return;
+        }
+        m_languageMode = mode;
+        m_rules.clear();
+        m_commentStart = QRegularExpression();
+        m_commentEnd = QRegularExpression();
+        m_multiLineCommentFormat = QTextCharFormat();
+
+        if (mode == LanguageMode::Cpp) {
+            configureCppRules();
+        } else if (mode == LanguageMode::Python) {
+            configurePythonRules();
+        }
+
+        rehighlight();
+    }
+
+protected:
+    void highlightBlock(const QString &text) override
+    {
+        for (const HighlightRule &rule : m_rules) {
+            QRegularExpressionMatchIterator iterator = rule.pattern.globalMatch(text);
+            while (iterator.hasNext()) {
+                const QRegularExpressionMatch match = iterator.next();
+                setFormat(match.capturedStart(), match.capturedLength(), rule.format);
+            }
+        }
+
+        if (!m_commentStart.isValid() || !m_commentEnd.isValid()) {
+            setCurrentBlockState(0);
+            return;
+        }
+
+        setCurrentBlockState(0);
+
+        int startIndex = previousBlockState() == 1 ? 0 : text.indexOf(m_commentStart);
+        while (startIndex >= 0) {
+            const QRegularExpressionMatch endMatch =
+                m_commentEnd.match(text, startIndex);
+            int endIndex = endMatch.capturedStart();
+            int commentLength = 0;
+            if (endIndex < 0) {
+                setCurrentBlockState(1);
+                commentLength = text.size() - startIndex;
+            } else {
+                commentLength = endIndex - startIndex + endMatch.capturedLength();
+            }
+
+            setFormat(startIndex, commentLength, m_multiLineCommentFormat);
+            startIndex = text.indexOf(m_commentStart, startIndex + commentLength);
+        }
+    }
+
+private:
+    struct HighlightRule
+    {
+        QRegularExpression pattern;
+        QTextCharFormat format;
+    };
+
+    void configureCppRules()
+    {
+        QTextCharFormat keywordFormat;
+        keywordFormat.setForeground(QColor("#0b57d0"));
+        keywordFormat.setFontWeight(QFont::Bold);
+        addKeywordRules(
+            {"alignas",    "alignof",     "asm",       "auto",      "bool",
+             "break",      "case",        "catch",     "char",      "char8_t",
+             "char16_t",   "char32_t",    "class",     "concept",   "const",
+             "consteval",  "constexpr",   "constinit", "const_cast","continue",
+             "co_await",   "co_return",   "co_yield",  "decltype",  "default",
+             "delete",     "do",          "double",    "dynamic_cast",
+             "else",       "enum",        "explicit",  "export",    "extern",
+             "false",      "float",       "for",       "friend",    "goto",
+             "if",         "inline",      "int",       "long",      "mutable",
+             "namespace",  "new",         "noexcept",  "nullptr",   "operator",
+             "private",    "protected",   "public",    "register",  "reinterpret_cast",
+             "requires",   "return",      "short",     "signed",    "sizeof",
+             "static",     "static_assert","static_cast","struct",  "switch",
+             "template",   "this",        "thread_local","throw",   "true",
+             "try",        "typedef",     "typeid",    "typename",  "union",
+             "unsigned",   "using",       "virtual",   "void",      "volatile",
+             "wchar_t",    "while"},
+            keywordFormat);
+
+        QTextCharFormat typeFormat;
+        typeFormat.setForeground(QColor("#6f42c1"));
+        addRule(QStringLiteral("\\b(std|string|vector|map|set|unordered_map|unordered_set|pair|tuple|queue|stack|deque|priority_queue)\\b"),
+                typeFormat);
+
+        QTextCharFormat preprocessorFormat;
+        preprocessorFormat.setForeground(QColor("#9a6700"));
+        addRule(QStringLiteral("^\\s*#[^\\n]*"), preprocessorFormat);
+
+        QTextCharFormat stringFormat;
+        stringFormat.setForeground(QColor("#0a7f2e"));
+        addRule(QStringLiteral(R"("(\\.|[^"\\])*")"), stringFormat);
+        addRule(QStringLiteral(R"('(\\.|[^'\\])*')"), stringFormat);
+
+        QTextCharFormat numberFormat;
+        numberFormat.setForeground(QColor("#116329"));
+        addRule(QStringLiteral(R"(\b\d+([uUlLfF]|ll|LL)?\b)"), numberFormat);
+        addRule(QStringLiteral(R"(\b\d+\.\d+([eE][+-]?\d+)?[fFlL]?\b)"), numberFormat);
+        addRule(QStringLiteral(R"(\b0[xX][0-9a-fA-F]+([uUlL]|ll|LL)?\b)"), numberFormat);
+
+        QTextCharFormat functionFormat;
+        functionFormat.setForeground(QColor("#005cc5"));
+        addRule(QStringLiteral(R"(\b[A-Za-z_]\w*(?=\s*\())"), functionFormat);
+
+        QTextCharFormat singleLineCommentFormat;
+        singleLineCommentFormat.setForeground(QColor("#6a737d"));
+        addRule(QStringLiteral(R"(//[^\n]*)"), singleLineCommentFormat);
+        m_multiLineCommentFormat = singleLineCommentFormat;
+        m_commentStart = QRegularExpression(QStringLiteral(R"(/\*)"));
+        m_commentEnd = QRegularExpression(QStringLiteral(R"(\*/)"));
+    }
+
+    void configurePythonRules()
+    {
+        QTextCharFormat keywordFormat;
+        keywordFormat.setForeground(QColor("#0b57d0"));
+        keywordFormat.setFontWeight(QFont::Bold);
+        addKeywordRules(
+            {"False", "None", "True", "and", "as", "assert", "async", "await",
+             "break", "class", "continue", "def", "del", "elif", "else",
+             "except", "finally", "for", "from", "global", "if", "import",
+             "in", "is", "lambda", "nonlocal", "not", "or", "pass", "raise",
+             "return", "try", "while", "with", "yield"},
+            keywordFormat);
+
+        QTextCharFormat builtinFormat;
+        builtinFormat.setForeground(QColor("#6f42c1"));
+        addRule(QStringLiteral("\\b(int|float|str|list|dict|set|tuple|bool|len|range|print|input|enumerate|zip|map|filter|sum|min|max|abs|sorted)\\b"),
+                builtinFormat);
+
+        QTextCharFormat decoratorFormat;
+        decoratorFormat.setForeground(QColor("#9a6700"));
+        addRule(QStringLiteral(R"(@[A-Za-z_]\w*)"), decoratorFormat);
+
+        QTextCharFormat stringFormat;
+        stringFormat.setForeground(QColor("#0a7f2e"));
+        addRule(QStringLiteral(R"("(\\.|[^"\\])*")"), stringFormat);
+        addRule(QStringLiteral(R"('(\\.|[^'\\])*')"), stringFormat);
+        addRule(QStringLiteral(R"("""[\s\S]*?""")"), stringFormat);
+        addRule(QStringLiteral(R"('''[\s\S]*?''')"), stringFormat);
+
+        QTextCharFormat numberFormat;
+        numberFormat.setForeground(QColor("#116329"));
+        addRule(QStringLiteral(R"(\b\d+(\.\d+)?([eE][+-]?\d+)?\b)"), numberFormat);
+
+        QTextCharFormat functionFormat;
+        functionFormat.setForeground(QColor("#005cc5"));
+        addRule(QStringLiteral(R"(\b[A-Za-z_]\w*(?=\s*\())"), functionFormat);
+
+        QTextCharFormat commentFormat;
+        commentFormat.setForeground(QColor("#6a737d"));
+        addRule(QStringLiteral(R"(#[^\n]*)"), commentFormat);
+    }
+
+    void addRule(const QString &pattern, const QTextCharFormat &format)
+    {
+        m_rules.push_back({QRegularExpression(pattern), format});
+    }
+
+    void addKeywordRules(const QStringList &keywords, const QTextCharFormat &format)
+    {
+        for (const QString &keyword : keywords) {
+            addRule(QStringLiteral("\\b") + QRegularExpression::escape(keyword)
+                        + QStringLiteral("\\b"),
+                    format);
+        }
+    }
+
+    QVector<HighlightRule> m_rules;
+    LanguageMode m_languageMode = LanguageMode::PlainText;
+    QTextCharFormat m_multiLineCommentFormat;
+    QRegularExpression m_commentStart;
+    QRegularExpression m_commentEnd;
+};
+
+LineNumberArea::LineNumberArea(IdeCodeEditor *editor)
+    : QWidget(static_cast<QWidget *>(editor)), m_editor(editor)
+{
+}
+
+QSize LineNumberArea::sizeHint() const
+{
+    return QSize(m_editor == nullptr ? 0 : m_editor->lineNumberAreaWidth(), 0);
+}
+
+void LineNumberArea::paintEvent(QPaintEvent *event)
+{
+    if (m_editor != nullptr) {
+        m_editor->lineNumberAreaPaintEvent(event);
+    }
+}
+
 QString formatProblemDetail(const ProblemPageInfo &problemPageInfo)
 {
     return QString(
@@ -174,6 +651,7 @@ QString formatResultPageInfo(const ResultPageInfo &resultPageInfo)
 ProblemPage::ProblemPage(QWidget *parent)
     : QWidget(parent)
 {
+    writeStartupLog("ProblemPage: constructor begin");
     auto *layout = new QVBoxLayout(this);
     layout->setContentsMargins(0, 0, 0, 0);
     layout->setSpacing(4);
@@ -185,13 +663,20 @@ ProblemPage::ProblemPage(QWidget *parent)
     topLayout->setContentsMargins(24, 18, 24, 18);
     topLayout->setSpacing(16);
 
-    auto *backButton = new QPushButton("Back", topFrame);
-    backButton->setObjectName("problemBackButton");
     m_titleLabel = new QLabel("Problem", topFrame);
     m_titleLabel->setObjectName("problemTitleLabel");
+    auto *homeButton = new QPushButton("Home", topFrame);
+    homeButton->setObjectName("problemRefreshButton");
+    auto *themeButton = new QPushButton("Dark Mode", topFrame);
+    themeButton->setObjectName("problemRefreshButton");
+    auto *refreshButton = new QPushButton("Refresh", topFrame);
+    refreshButton->setObjectName("problemRefreshButton");
 
-    topLayout->addWidget(backButton);
     topLayout->addWidget(m_titleLabel, 1);
+    topLayout->addWidget(homeButton, 0, Qt::AlignRight);
+    topLayout->addWidget(themeButton, 0, Qt::AlignRight);
+    topLayout->addWidget(refreshButton, 0, Qt::AlignRight);
+    writeStartupLog("ProblemPage: top frame complete");
 
     auto *bottomLayout = new QHBoxLayout();
     bottomLayout->setSpacing(4);
@@ -245,6 +730,7 @@ ProblemPage::ProblemPage(QWidget *parent)
     leftLayout->addWidget(m_toolsPanel);
     leftLayout->addWidget(m_collapsedToolsPanel);
     leftLayout->addStretch();
+    writeStartupLog("ProblemPage: tools frame complete");
 
     auto *problemFrame = new QFrame(this);
     problemFrame->setObjectName("problemMiddleFrame");
@@ -261,6 +747,7 @@ ProblemPage::ProblemPage(QWidget *parent)
 
     problemLayout->addWidget(problemLabel);
     problemLayout->addWidget(m_detailTextEdit, 1);
+    writeStartupLog("ProblemPage: problem frame complete");
 
     auto *submitFrame = new QFrame(this);
     submitFrame->setObjectName("problemRightFrame");
@@ -273,10 +760,14 @@ ProblemPage::ProblemPage(QWidget *parent)
 
     m_languageComboBox = new QComboBox(submitFrame);
     m_languageComboBox->setObjectName("problemLanguageCombo");
-    m_codeEdit = new QPlainTextEdit(submitFrame);
+    m_codeEdit = new IdeCodeEditor(submitFrame);
     m_codeEdit->setObjectName("problemCodeEdit");
     m_codeEdit->setPlaceholderText("Write your source code here.");
     m_codeEdit->setMinimumHeight(180);
+    m_codeEdit->setTabStopDistance(
+        m_codeEdit->fontMetrics().horizontalAdvance(QLatin1Char(' ')) * 4);
+    m_codeHighlighter = new CodeSyntaxHighlighter(m_codeEdit->document());
+    writeStartupLog("ProblemPage: code editor complete");
     auto *resultTabLayout = new QHBoxLayout();
     resultTabLayout->setContentsMargins(0, 0, 0, 0);
     resultTabLayout->setSpacing(8);
@@ -348,6 +839,7 @@ ProblemPage::ProblemPage(QWidget *parent)
     submitLayout->addWidget(submitLabel);
     submitLayout->addWidget(m_languageComboBox);
     submitLayout->addWidget(m_submitPaneSplitter, 1);
+    writeStartupLog("ProblemPage: submit frame complete");
 
     m_aiFrame = new QFrame(this);
     m_aiFrame->setObjectName("problemAiFrame");
@@ -357,7 +849,7 @@ ProblemPage::ProblemPage(QWidget *parent)
 
     auto *aiLabel = new QLabel("AI", m_aiFrame);
     aiLabel->setObjectName("problemSectionLabel");
-    m_aiConfigLabel = new QLabel("Config: using defaults", m_aiFrame);
+    m_aiConfigLabel = new QLabel("Config:", m_aiFrame);
     m_aiConfigLabel->setObjectName("problemAiMetaLabel");
     auto *aiPromptLabel = new QLabel("Prompt", m_aiFrame);
     aiPromptLabel->setObjectName("problemAiFieldLabel");
@@ -365,7 +857,7 @@ ProblemPage::ProblemPage(QWidget *parent)
     m_aiPromptEdit->setObjectName("problemCodeEdit");
     m_aiPromptEdit->setPlaceholderText("Ask AI about the current problem, code, or test result.");
     m_aiPromptEdit->setMinimumHeight(120);
-    m_aiAskButton = new QPushButton("Ask AI", m_aiFrame);
+    m_aiAskButton = new QPushButton("Ask", m_aiFrame);
     m_aiAskButton->setObjectName("problemSubmitButton");
     auto *aiResponseLabel = new QLabel("Response", m_aiFrame);
     aiResponseLabel->setObjectName("problemAiFieldLabel");
@@ -375,12 +867,13 @@ ProblemPage::ProblemPage(QWidget *parent)
     m_aiResponseTextEdit->setPlaceholderText("AI response will appear here.");
     aiLayout->addWidget(aiLabel);
     aiLayout->addWidget(m_aiConfigLabel);
+    aiLayout->addWidget(aiResponseLabel);
+    aiLayout->addWidget(m_aiResponseTextEdit, 1);
     aiLayout->addWidget(aiPromptLabel);
     aiLayout->addWidget(m_aiPromptEdit);
     aiLayout->addWidget(m_aiAskButton, 0, Qt::AlignRight);
-    aiLayout->addWidget(aiResponseLabel);
-    aiLayout->addWidget(m_aiResponseTextEdit, 1);
     m_aiFrame->hide();
+    writeStartupLog("ProblemPage: ai frame complete");
 
     auto *contentSplitter = new QSplitter(Qt::Horizontal, this);
     contentSplitter->setObjectName("problemContentSplitter");
@@ -406,10 +899,16 @@ ProblemPage::ProblemPage(QWidget *parent)
 
     layout->addWidget(topFrame);
     layout->addLayout(bottomLayout, 1);
+    writeStartupLog("ProblemPage: layout assembly complete");
 
     setStyleSheet(
         "ProblemPage { background: #f3f1eb; }"
-        "#problemTopFrame, #problemLeftFrame, #problemMiddleFrame, #problemRightFrame, #problemAiFrame {"
+        "#problemTopFrame, #problemLeftFrame, #problemMiddleFrame, #problemAiFrame {"
+        "  background: #fbfaf7;"
+        "  border: 1px solid #ded8cc;"
+        "  border-radius: 16px;"
+        "}"
+        "#problemRightFrame {"
         "  background: #fbfaf7;"
         "  border: 1px solid #ded8cc;"
         "  border-radius: 16px;"
@@ -474,6 +973,17 @@ ProblemPage::ProblemPage(QWidget *parent)
         "#problemBackButton:hover, #problemSubmitButton:hover, #problemInputButton:hover {"
         "  background: #eef4ef;"
         "}"
+        "#problemRefreshButton {"
+        "  min-width: 88px;"
+        "  padding: 8px 14px;"
+        "  border: 1px solid #cdd7cf;"
+        "  border-radius: 10px;"
+        "  background: #f7f5ef;"
+        "  color: #243029;"
+        "}"
+        "#problemRefreshButton:hover {"
+        "  background: #eef4ef;"
+        "}"
         "#problemResultTabButton {"
         "  min-width: 72px;"
         "  padding: 6px 12px;"
@@ -515,11 +1025,49 @@ ProblemPage::ProblemPage(QWidget *parent)
         "  border-radius: 12px;"
         "  color: #1f2328;"
         "}"
+        "#problemRightFrame #problemCodeEdit {"
+        "  background: #ffffff;"
+        "  border: 1px solid #cfd7e3;"
+        "  border-radius: 12px;"
+        "  color: #1f2328;"
+        "  selection-background-color: #cfe8ff;"
+        "  selection-color: #1f2328;"
+        "  padding: 10px 10px 10px 0px;"
+        "  font-family: 'Consolas', 'Courier New', monospace;"
+        "  font-size: 14px;"
+        "}"
+        "#problemRightFrame #problemCodeEdit:focus {"
+        "  border: 1px solid #5b9dff;"
+        "}"
+        "#problemRightFrame #problemLanguageCombo {"
+        "  background: #ffffff;"
+        "  border: 1px solid #cfd7e3;"
+        "  border-radius: 10px;"
+        "  color: #1f2328;"
+        "  padding: 6px 10px;"
+        "  min-height: 34px;"
+        "}"
+        "#problemRightFrame #problemLanguageCombo::drop-down {"
+        "  border: none;"
+        "  width: 24px;"
+        "}"
+        "#problemRightFrame #problemLanguageCombo QAbstractItemView {"
+        "  background: #ffffff;"
+        "  border: 1px solid #cfd7e3;"
+        "  color: #1f2328;"
+        "  selection-background-color: #cfe8ff;"
+        "}"
     );
+    writeStartupLog("ProblemPage: stylesheet applied");
 
     setToolsExpanded(true);
+    writeStartupLog("ProblemPage: tools expanded set");
 
-    connect(backButton, &QPushButton::clicked, this, &ProblemPage::backRequested);
+    connect(homeButton, &QPushButton::clicked, this, &ProblemPage::homeRequested);
+    connect(themeButton, &QPushButton::clicked, this, [this]() {
+        emit themeToggleRequested(!m_darkMode);
+    });
+    connect(refreshButton, &QPushButton::clicked, this, &ProblemPage::refreshRequested);
     connect(m_backToolButton, &QPushButton::clicked, this, &ProblemPage::backRequested);
     connect(m_collapsedBackButton, &QPushButton::clicked, this, &ProblemPage::backRequested);
     connect(m_favoriteToolButton, &QPushButton::clicked, this, &ProblemPage::favoriteRequested);
@@ -530,6 +1078,13 @@ ProblemPage::ProblemPage(QWidget *parent)
     connect(m_collapsedAiButton, &QPushButton::clicked, this, [this]() {
         setAiPanelVisible(!m_aiPanelVisible);
     });
+    connect(
+        m_languageComboBox,
+        &QComboBox::currentIndexChanged,
+        this,
+        [this](int) {
+            updateCodeHighlightLanguage();
+        });
     connect(
         m_toolsToggleButton,
         &QPushButton::clicked,
@@ -579,8 +1134,17 @@ ProblemPage::ProblemPage(QWidget *parent)
         [this]() {
             setResultTab(false);
         });
+    writeStartupLog("ProblemPage: signal connections complete");
 
-    openProblem();
+    m_titleLabel->setText("Problem");
+    m_detailTextEdit->setPlainText("Loading problem detail...");
+    m_submitResultTextEdit->setPlainText("Preparing submit options...");
+    m_testTabButton->setChecked(true);
+    m_submitTabButton->setChecked(false);
+    m_resultStack->setCurrentWidget(m_testPaneSplitter);
+    m_submitButton->setVisible(false);
+    m_inputButton->setVisible(true);
+    writeStartupLog("ProblemPage: constructor end");
 }
 
 void ProblemPage::setToolsExpanded(bool expanded)
@@ -664,14 +1228,25 @@ void ProblemPage::setResultTab(bool showTestTab)
 
 void ProblemPage::openProblem(const QString &problemTitle)
 {
+    writeStartupLog("ProblemPage::openProblem begin");
     m_titleLabel->setText(problemTitle.isEmpty() ? "Problem" : problemTitle);
+    writeStartupLog("ProblemPage::openProblem title set");
     m_detailTextEdit->setPlainText("Loading problem detail...");
+    writeStartupLog("ProblemPage::openProblem detail placeholder set");
     resetSubmitPanel();
+    writeStartupLog("ProblemPage::openProblem resetSubmitPanel done");
+    setSourceCodeText(QString());
+    writeStartupLog("ProblemPage::openProblem source cleared");
     m_aiTranscript.clear();
+    writeStartupLog("ProblemPage::openProblem transcript cleared");
     m_aiResponseBuffer.clear();
+    writeStartupLog("ProblemPage::openProblem response buffer cleared");
     refreshAiResponseView();
+    writeStartupLog("ProblemPage::openProblem response view refreshed");
     setFavoriteEnabled(false);
+    writeStartupLog("ProblemPage::openProblem favorite disabled");
     setSubmitEnabled(false);
+    writeStartupLog("ProblemPage::openProblem submit disabled");
 }
 
 void ProblemPage::showProblemLoadedFromFavorites(const ProblemPageInfo &problemPageInfo)
@@ -695,8 +1270,11 @@ void ProblemPage::showProblemLoadFailed(const QString &message)
 
 void ProblemPage::openSubmit(const ProblemPageInfo &problemPageInfo)
 {
-    Q_UNUSED(problemPageInfo);
+    writeStartupLog("ProblemPage::openSubmit begin");
     resetSubmitPanel();
+    writeStartupLog("ProblemPage::openSubmit resetSubmitPanel done");
+    Q_UNUSED(problemPageInfo);
+    writeStartupLog("ProblemPage::openSubmit starter code skipped");
 }
 
 void ProblemPage::showLoadingSubmitOptions(bool loading)
@@ -707,23 +1285,34 @@ void ProblemPage::showLoadingSubmitOptions(bool loading)
 void ProblemPage::showSubmitPageLoaded(const SubmitPageInfo &submitPageInfo,
                                        const QString &defaultLanguage)
 {
+    writeStartupLog("ProblemPage::showSubmitPageLoaded begin");
+    const QSignalBlocker blocker(m_languageComboBox);
     m_languageComboBox->clear();
     for (const SubmitLanguageOption &option : submitPageInfo.languages) {
         m_languageComboBox->addItem(option.label, option.value);
     }
+    writeStartupLog("ProblemPage::showSubmitPageLoaded languages filled");
 
     const int index = m_languageComboBox->findData(defaultLanguage);
     if (index >= 0) {
         m_languageComboBox->setCurrentIndex(index);
     }
+    writeStartupLog("ProblemPage::showSubmitPageLoaded default language selected");
 
     const bool hasLanguages = m_languageComboBox->count() > 0;
     m_languageComboBox->setEnabled(hasLanguages);
     m_codeEdit->setEnabled(true);
+    writeStartupLog("ProblemPage::showSubmitPageLoaded widgets enabled");
+    QTimer::singleShot(0, this, [this]() {
+        writeStartupLog("ProblemPage::showSubmitPageLoaded deferred highlight begin");
+        updateCodeHighlightLanguage();
+        writeStartupLog("ProblemPage::showSubmitPageLoaded deferred highlight end");
+    });
     m_submitButton->setEnabled(hasLanguages && m_submitTabButton->isChecked());
     m_submitResultTextEdit->setPlainText(
         QString("Submit page loaded.\nAction: %1")
             .arg(submitPageInfo.submitActionUrl));
+    writeStartupLog("ProblemPage::showSubmitPageLoaded end");
 }
 
 void ProblemPage::showSubmitting(bool submitting)
@@ -938,17 +1527,57 @@ void ProblemPage::setSubmitEnabled(bool enabled)
 
 void ProblemPage::resetSubmitPanel()
 {
+    writeStartupLog("ProblemPage::resetSubmitPanel begin");
     m_testing = false;
+    writeStartupLog("ProblemPage::resetSubmitPanel testing false");
+    const QSignalBlocker blocker(m_languageComboBox);
     m_languageComboBox->clear();
+    writeStartupLog("ProblemPage::resetSubmitPanel language cleared");
     m_languageComboBox->setEnabled(false);
+    writeStartupLog("ProblemPage::resetSubmitPanel language disabled");
     m_codeEdit->setEnabled(false);
+    writeStartupLog("ProblemPage::resetSubmitPanel code disabled");
     m_submitButton->setEnabled(false);
+    writeStartupLog("ProblemPage::resetSubmitPanel submit disabled");
     m_inputButton->setEnabled(false);
+    writeStartupLog("ProblemPage::resetSubmitPanel input disabled");
     m_testInputTextEdit->clear();
+    writeStartupLog("ProblemPage::resetSubmitPanel test input cleared");
     m_testResultTextEdit->clear();
+    writeStartupLog("ProblemPage::resetSubmitPanel test output cleared");
     m_submitResultTextEdit->setPlainText("Preparing submit options...");
+    writeStartupLog("ProblemPage::resetSubmitPanel submit result set");
     setResultTab(true);
+    writeStartupLog("ProblemPage::resetSubmitPanel result tab set");
     m_lastSubmitPreview.clear();
+    writeStartupLog("ProblemPage::resetSubmitPanel end");
+}
+
+void ProblemPage::updateCodeHighlightLanguage()
+{
+    auto *highlighter = dynamic_cast<CodeSyntaxHighlighter *>(m_codeHighlighter);
+    if (highlighter == nullptr || m_languageComboBox == nullptr) {
+        return;
+    }
+
+    const QString label = currentLanguageLabel().toLower();
+    const QString value = currentLanguageValue().toLower();
+
+    CodeSyntaxHighlighter::LanguageMode mode =
+        CodeSyntaxHighlighter::LanguageMode::PlainText;
+    if (label.contains("python") || value.contains("python")) {
+        mode = CodeSyntaxHighlighter::LanguageMode::Python;
+    } else if (label.contains("g++") || label.contains("gcc")
+               || value.contains("g++") || value.contains("gcc")
+               || value.contains("cpp") || value.contains("c++")) {
+        mode = CodeSyntaxHighlighter::LanguageMode::Cpp;
+    }
+
+    if (m_codeEdit != nullptr && m_codeEdit->toPlainText().isEmpty()) {
+        return;
+    }
+
+    highlighter->setLanguageMode(mode);
 }
 
 void ProblemPage::appendAiTranscriptBlock(const QString &title, const QString &body)
@@ -967,5 +1596,92 @@ void ProblemPage::refreshAiResponseView()
         } else {
             m_aiResponseTextEdit->setPlainText(m_aiTranscript);
         }
+    }
+}
+
+void ProblemPage::setDarkMode(bool dark)
+{
+    m_darkMode = dark;
+    g_problemPageDarkMode = dark;
+    QString lightStyle = property("_lightStyleSheet").toString();
+    if (lightStyle.isEmpty()) {
+        lightStyle = styleSheet();
+        setProperty("_lightStyleSheet", lightStyle);
+    }
+
+    const QString darkOverride =
+        "ProblemPage { background: #000000; }"
+        "#problemTopFrame, #problemLeftFrame, #problemMiddleFrame, #problemRightFrame, #problemAiFrame {"
+        "  background: #1b232c;"
+        "  border: 1px solid #2c3844;"
+        "}"
+        "#problemTitleLabel, #problemSectionLabel, #problemToolsToggleButton, #problemToolButton, #problemToolIconButton, #problemAiConfigLabel, #problemAiFieldLabel, #problemAiMetaLabel {"
+        "  color: #d9e1e8;"
+        "}"
+        "#problemRefreshButton, #problemInputButton, #problemSubmitButton, #problemResultTabButton {"
+        "  border: 1px solid #3a4652;"
+        "  background: #202a34;"
+        "  color: #e8edf2;"
+        "}"
+        "#problemRefreshButton:hover, #problemInputButton:hover, #problemSubmitButton:hover, #problemResultTabButton:hover, #problemToolButton:hover, #problemToolIconButton:hover {"
+        "  background: #26313c;"
+        "}"
+        "#problemResultTabButton:checked {"
+        "  background: #234257;"
+        "  border: 1px solid #4d82b8;"
+        "  color: #eff8ff;"
+        "}"
+        "#problemResultTabButton:checked:hover {"
+        "  background: #2a4d65;"
+        "}"
+        "#problemDetailText {"
+        "  background: #121920;"
+        "  border: 1px solid #3a4652;"
+        "  color: #e8edf2;"
+        "  selection-background-color: #295a85;"
+        "}"
+        "#problemRightFrame #problemLanguageCombo {"
+        "  background: #121920;"
+        "  border: 1px solid #3a4652;"
+        "  color: #e8edf2;"
+        "}"
+        "#problemRightFrame #problemLanguageCombo QAbstractItemView {"
+        "  background: #121920;"
+        "  border: 1px solid #3a4652;"
+        "  color: #e8edf2;"
+        "  selection-background-color: #295a85;"
+        "}"
+        "#problemRightFrame #problemCodeEdit {"
+        "  background: #0f141a;"
+        "  border: 1px solid #3a4652;"
+        "  color: #e8edf2;"
+        "  selection-background-color: #295a85;"
+        "}"
+        "#problemRightFrame #problemCodeEdit:focus {"
+        "  border: 1px solid #4d82b8;"
+        "}"
+        "#problemRightFrame #problemResultText, #problemAiFrame #problemResultText {"
+        "  background: #121920;"
+        "  border: 1px solid #3a4652;"
+        "  color: #e8edf2;"
+        "  selection-background-color: #295a85;"
+        "}"
+        "#problemAiFrame #problemCodeEdit {"
+        "  background: #121920;"
+        "  border: 1px solid #3a4652;"
+        "  color: #e8edf2;"
+        "  selection-background-color: #295a85;"
+        "}"
+        "#problemSubmitPaneSplitter::handle, #problemWorkspaceSplitter::handle, #problemContentSplitter::handle {"
+        "  background: transparent;"
+        "}"
+        "#problemSubmitPaneSplitter::handle:hover, #problemWorkspaceSplitter::handle:hover, #problemContentSplitter::handle:hover {"
+        "  background: rgba(255, 255, 255, 0.10);"
+        "}";
+
+    setStyleSheet(dark ? lightStyle + darkOverride : lightStyle);
+    if (m_codeEdit != nullptr) {
+        m_codeEdit->viewport()->update();
+        m_codeEdit->update();
     }
 }

@@ -82,6 +82,7 @@ bool ProblemService::sameProblemPage(const ProblemPageInfo &lhs,
         && lhs.timeLimit == rhs.timeLimit
         && lhs.memoryLimit == rhs.memoryLimit
         && lhs.description == rhs.description
+        && lhs.starterCode == rhs.starterCode
         && lhs.inputSpec == rhs.inputSpec
         && lhs.outputSpec == rhs.outputSpec
         && lhs.sampleInput == rhs.sampleInput

@@ -11,6 +11,7 @@ class QComboBox;
 class QLabel;
 class QPlainTextEdit;
 class QPushButton;
+class QSyntaxHighlighter;
 class QTextEdit;
 class QListWidget;
 class QListWidgetItem;
@@ -25,6 +26,7 @@ class ProblemPage : public QWidget
 
 public:
     explicit ProblemPage(QWidget *parent = nullptr);
+    void setDarkMode(bool dark);
 
     void openProblem(const QString &problemTitle = QString());
     void showProblemLoadedFromFavorites(const ProblemPageInfo &problemPageInfo);
@@ -63,6 +65,9 @@ public:
 
 signals:
     void backRequested();
+    void homeRequested();
+    void themeToggleRequested(bool dark);
+    void refreshRequested();
     void favoriteRequested();
     void aiAskRequested(const QString &question);
     void testRequested(const QString &languageLabel,
@@ -75,6 +80,7 @@ private:
     void setAiPanelVisible(bool visible);
     void setResultTab(bool showTestTab);
     void resetSubmitPanel();
+    void updateCodeHighlightLanguage();
     void appendAiTranscriptBlock(const QString &title, const QString &body);
     void refreshAiResponseView();
 
@@ -95,6 +101,7 @@ private:
     QPlainTextEdit *m_aiPromptEdit = nullptr;
     QPushButton *m_aiAskButton = nullptr;
     QTextEdit *m_aiResponseTextEdit = nullptr;
+    QSyntaxHighlighter *m_codeHighlighter = nullptr;
     QComboBox *m_languageComboBox = nullptr;
     QPlainTextEdit *m_codeEdit = nullptr;
     QPushButton *m_submitButton = nullptr;
@@ -115,4 +122,5 @@ private:
     bool m_aiThinking = false;
     QString m_aiTranscript;
     QString m_aiResponseBuffer;
+    bool m_darkMode = false;
 };

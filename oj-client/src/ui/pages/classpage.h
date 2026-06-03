@@ -17,6 +17,7 @@ class ClassPage : public QWidget
 
 public:
     explicit ClassPage(QWidget *parent = nullptr);
+    void setDarkMode(bool dark);
 
     void openClass(const QString &name, const QString &url);
     void showLoadingContests();
@@ -25,6 +26,9 @@ public:
 
 signals:
     void backRequested();
+    void homeRequested();
+    void themeToggleRequested(bool dark);
+    void refreshRequested();
     void contestSelected(const QString &title, const QString &url);
 
 private:
@@ -41,4 +45,5 @@ private:
     QString m_className;
     QString m_classUrl;
     bool m_toolsExpanded = true;
+    bool m_darkMode = false;
 };

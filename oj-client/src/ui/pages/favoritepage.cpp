@@ -23,16 +23,55 @@ FavoritePage::FavoritePage(QWidget *parent)
     topLayout->setContentsMargins(24, 18, 24, 18);
     topLayout->setSpacing(16);
 
-    auto *backButton = new QPushButton("Back", topFrame);
-    backButton->setObjectName("favoriteActionButton");
     auto *titleLabel = new QLabel("Favorites", topFrame);
     titleLabel->setObjectName("favoriteTitleLabel");
+    auto *homeButton = new QPushButton("Home", topFrame);
+    homeButton->setObjectName("favoriteActionButton");
+    auto *themeButton = new QPushButton("Dark Mode", topFrame);
+    themeButton->setObjectName("favoriteActionButton");
     auto *refreshButton = new QPushButton("Refresh", topFrame);
     refreshButton->setObjectName("favoriteActionButton");
 
-    topLayout->addWidget(backButton);
     topLayout->addWidget(titleLabel, 1);
+    topLayout->addWidget(homeButton);
+    topLayout->addWidget(themeButton);
     topLayout->addWidget(refreshButton);
+
+    auto *bottomLayout = new QHBoxLayout();
+    bottomLayout->setSpacing(18);
+
+    m_toolsFrame = new QFrame(this);
+    m_toolsFrame->setObjectName("favoriteLeftFrame");
+    auto *leftLayout = new QVBoxLayout(m_toolsFrame);
+    leftLayout->setContentsMargins(20, 18, 20, 18);
+    leftLayout->setSpacing(12);
+
+    m_toolsToggleButton = new QPushButton(m_toolsFrame);
+    m_toolsToggleButton->setObjectName("favoriteToolsToggleButton");
+
+    m_toolsPanel = new QWidget(m_toolsFrame);
+    auto *toolsPanelLayout = new QVBoxLayout(m_toolsPanel);
+    toolsPanelLayout->setContentsMargins(0, 0, 0, 0);
+    toolsPanelLayout->setSpacing(10);
+    m_backToolButton = new QPushButton("Back", m_toolsPanel);
+    m_backToolButton->setObjectName("favoriteToolButton");
+    toolsPanelLayout->addWidget(m_backToolButton);
+    toolsPanelLayout->addStretch();
+
+    m_collapsedToolsPanel = new QWidget(m_toolsFrame);
+    auto *collapsedLayout = new QVBoxLayout(m_collapsedToolsPanel);
+    collapsedLayout->setContentsMargins(0, 0, 0, 0);
+    collapsedLayout->setSpacing(10);
+    m_collapsedBackButton = new QPushButton("B", m_collapsedToolsPanel);
+    m_collapsedBackButton->setObjectName("favoriteToolIconButton");
+    m_collapsedBackButton->setToolTip("Back");
+    collapsedLayout->addWidget(m_collapsedBackButton);
+    collapsedLayout->addStretch();
+
+    leftLayout->addWidget(m_toolsToggleButton);
+    leftLayout->addWidget(m_toolsPanel);
+    leftLayout->addWidget(m_collapsedToolsPanel);
+    leftLayout->addStretch();
 
     auto *contentFrame = new QFrame(this);
     contentFrame->setObjectName("favoriteContentFrame");
@@ -73,15 +112,41 @@ FavoritePage::FavoritePage(QWidget *parent)
     contentLayout->addLayout(folderActionsLayout);
     contentLayout->addWidget(m_removeButton, 0, Qt::AlignLeft);
 
+    bottomLayout->addWidget(m_toolsFrame, 1);
+    bottomLayout->addWidget(contentFrame, 4);
+
     layout->addWidget(topFrame);
-    layout->addWidget(contentFrame, 1);
+    layout->addLayout(bottomLayout, 1);
 
     setStyleSheet(
         "FavoritePage { background: #f3f1eb; }"
-        "#favoriteTopFrame, #favoriteContentFrame {"
+        "#favoriteTopFrame, #favoriteLeftFrame, #favoriteContentFrame {"
         "  background: #fbfaf7;"
         "  border: 1px solid #ded8cc;"
         "  border-radius: 16px;"
+        "}"
+        "#favoriteToolsToggleButton {"
+        "  background: transparent;"
+        "  border: none;"
+        "  padding: 0px;"
+        "  text-align: left;"
+        "  font-size: 16px;"
+        "  font-weight: 600;"
+        "  color: #2f3a33;"
+        "}"
+        "#favoriteToolsToggleButton:hover {"
+        "  color: #12343b;"
+        "}"
+        "#favoriteToolButton {"
+        "  padding: 10px 12px;"
+        "  border: none;"
+        "  border-radius: 10px;"
+        "  background: transparent;"
+        "  color: #2f3a33;"
+        "  text-align: left;"
+        "}"
+        "#favoriteToolButton:hover, #favoriteToolIconButton:hover {"
+        "  background: #eef4ef;"
         "}"
         "#favoriteTitleLabel {"
         "  font-size: 28px;"
@@ -102,6 +167,17 @@ FavoritePage::FavoritePage(QWidget *parent)
         "}"
         "#favoriteActionButton:hover {"
         "  background: #eef4ef;"
+        "}"
+        "#favoriteToolIconButton {"
+        "  min-width: 36px;"
+        "  max-width: 36px;"
+        "  min-height: 36px;"
+        "  max-height: 36px;"
+        "  border: none;"
+        "  border-radius: 10px;"
+        "  background: transparent;"
+        "  color: #2f3a33;"
+        "  font-weight: 600;"
         "}"
         "#favoriteStatusLabel {"
         "  color: #7a4b36;"
@@ -128,22 +204,33 @@ FavoritePage::FavoritePage(QWidget *parent)
         "}"
     );
 
+    setToolsExpanded(true);
+
+    const auto handleBack = [this]() {
+        if (m_viewMode == ViewMode::FavoriteList) {
+            m_favoriteListWidget->clear();
+            m_statusLabel->clear();
+            m_currentFolderId = -1;
+            m_currentFolderName.clear();
+            setViewMode(ViewMode::FolderList);
+            emit refreshRequested();
+            return;
+        }
+
+        emit backRequested();
+    };
+    connect(m_backToolButton, &QPushButton::clicked, this, handleBack);
+    connect(m_collapsedBackButton, &QPushButton::clicked, this, handleBack);
+    connect(homeButton, &QPushButton::clicked, this, &FavoritePage::homeRequested);
+    connect(themeButton, &QPushButton::clicked, this, [this]() {
+        emit themeToggleRequested(!m_darkMode);
+    });
     connect(
-        backButton,
+        m_toolsToggleButton,
         &QPushButton::clicked,
         this,
         [this]() {
-            if (m_viewMode == ViewMode::FavoriteList) {
-                m_favoriteListWidget->clear();
-                m_statusLabel->clear();
-                m_currentFolderId = -1;
-                m_currentFolderName.clear();
-                setViewMode(ViewMode::FolderList);
-                emit refreshRequested();
-                return;
-            }
-
-            emit backRequested();
+            setToolsExpanded(!m_toolsExpanded);
         });
     connect(refreshButton, &QPushButton::clicked, this, &FavoritePage::refreshRequested);
     connect(
@@ -310,4 +397,64 @@ void FavoritePage::setViewMode(ViewMode mode, const QString &folderName)
         m_removeFolderButton->setVisible(false);
         m_removeButton->setVisible(true);
     }
+}
+
+void FavoritePage::setToolsExpanded(bool expanded)
+{
+    m_toolsExpanded = expanded;
+    if (m_toolsFrame != nullptr) {
+        m_toolsFrame->setMinimumWidth(expanded ? 0 : 84);
+        m_toolsFrame->setMaximumWidth(expanded ? QWIDGETSIZE_MAX : 84);
+    }
+    if (m_toolsPanel != nullptr) {
+        m_toolsPanel->setVisible(expanded);
+    }
+    if (m_collapsedToolsPanel != nullptr) {
+        m_collapsedToolsPanel->setVisible(!expanded);
+    }
+    if (m_collapsedBackButton != nullptr) {
+        m_collapsedBackButton->setVisible(!expanded);
+    }
+    if (m_toolsToggleButton != nullptr) {
+        m_toolsToggleButton->setText(expanded ? "Tools v" : ">");
+    }
+}
+
+void FavoritePage::setDarkMode(bool dark)
+{
+    m_darkMode = dark;
+    QString lightStyle = property("_lightStyleSheet").toString();
+    if (lightStyle.isEmpty()) {
+        lightStyle = styleSheet();
+        setProperty("_lightStyleSheet", lightStyle);
+    }
+
+    const QString darkOverride =
+        "FavoritePage { background: #000000; }"
+        "#favoriteTopFrame, #favoriteLeftFrame, #favoriteContentFrame {"
+        "  background: #1b232c;"
+        "  border: 1px solid #2c3844;"
+        "}"
+        "#favoriteTitleLabel, #favoriteSectionLabel, #favoriteToolsToggleButton, #favoriteToolButton, #favoriteToolIconButton {"
+        "  color: #d9e1e8;"
+        "}"
+        "#favoriteActionButton {"
+        "  border: 1px solid #3a4652;"
+        "  background: #202a34;"
+        "  color: #e8edf2;"
+        "}"
+        "#favoriteActionButton:hover, #favoriteToolButton:hover, #favoriteToolIconButton:hover {"
+        "  background: #26313c;"
+        "}"
+        "#favoriteStatusLabel { color: #f0b48a; }"
+        "#favoriteListWidget { color: #e8edf2; }"
+        "#favoriteListWidget::item:selected {"
+        "  background: #234257;"
+        "  color: #eff8ff;"
+        "}"
+        "#favoriteListWidget::item:hover {"
+        "  background: #26313c;"
+        "}";
+
+    setStyleSheet(dark ? lightStyle + darkOverride : lightStyle);
 }

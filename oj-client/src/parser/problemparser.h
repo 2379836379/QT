@@ -12,6 +12,7 @@ struct ProblemPageInfo
     QString timeLimit;
     QString memoryLimit;
     QString description;
+    QString starterCode;
     QString inputSpec;
     QString outputSpec;
     QString sampleInput;

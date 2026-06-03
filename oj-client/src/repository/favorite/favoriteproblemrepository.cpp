@@ -73,6 +73,7 @@ bool FavoriteProblemRepository::initialize()
         "time_limit TEXT,"
         "memory_limit TEXT,"
         "description TEXT,"
+        "starter_code TEXT,"
         "input_spec TEXT,"
         "output_spec TEXT,"
         "sample_input TEXT,"
@@ -186,7 +187,7 @@ QList<ProblemPageInfo> FavoriteProblemRepository::loadFavoritesInFolder(qint64 f
     QSqlQuery query(QSqlDatabase::database(m_connectionName));
     query.prepare(
         "SELECT p.problem_url, p.title, p.submit_url, p.time_limit, p.memory_limit, "
-        "p.description, p.input_spec, p.output_spec, p.sample_input, p.sample_output, p.hint "
+        "p.description, p.starter_code, p.input_spec, p.output_spec, p.sample_input, p.sample_output, p.hint "
         "FROM favorite_folder_items i "
         "JOIN favorite_problems p ON p.problem_url = i.problem_url "
         "WHERE i.folder_id = :folder_id "
@@ -261,10 +262,10 @@ bool FavoriteProblemRepository::upsertProblem(const ProblemPageInfo &problemPage
     query.prepare(
         "INSERT INTO favorite_problems ("
         "problem_url, title, submit_url, time_limit, memory_limit, "
-        "description, input_spec, output_spec, sample_input, sample_output, hint, saved_at"
+        "description, starter_code, input_spec, output_spec, sample_input, sample_output, hint, saved_at"
         ") VALUES ("
         ":problem_url, :title, :submit_url, :time_limit, :memory_limit, "
-        ":description, :input_spec, :output_spec, :sample_input, :sample_output, :hint, CURRENT_TIMESTAMP"
+        ":description, :starter_code, :input_spec, :output_spec, :sample_input, :sample_output, :hint, CURRENT_TIMESTAMP"
         ") "
         "ON CONFLICT(problem_url) DO UPDATE SET "
         "title = excluded.title, "
@@ -272,6 +273,7 @@ bool FavoriteProblemRepository::upsertProblem(const ProblemPageInfo &problemPage
         "time_limit = excluded.time_limit, "
         "memory_limit = excluded.memory_limit, "
         "description = excluded.description, "
+        "starter_code = excluded.starter_code, "
         "input_spec = excluded.input_spec, "
         "output_spec = excluded.output_spec, "
         "sample_input = excluded.sample_input, "
@@ -284,6 +286,7 @@ bool FavoriteProblemRepository::upsertProblem(const ProblemPageInfo &problemPage
     query.bindValue(":time_limit", problemPageInfo.timeLimit);
     query.bindValue(":memory_limit", problemPageInfo.memoryLimit);
     query.bindValue(":description", problemPageInfo.description);
+    query.bindValue(":starter_code", problemPageInfo.starterCode);
     query.bindValue(":input_spec", problemPageInfo.inputSpec);
     query.bindValue(":output_spec", problemPageInfo.outputSpec);
     query.bindValue(":sample_input", problemPageInfo.sampleInput);
@@ -307,7 +310,7 @@ bool FavoriteProblemRepository::loadFavorite(
     QSqlQuery query(QSqlDatabase::database(m_connectionName));
     query.prepare(
         "SELECT problem_url, title, submit_url, time_limit, memory_limit, "
-        "description, input_spec, output_spec, sample_input, sample_output, hint "
+        "description, starter_code, input_spec, output_spec, sample_input, sample_output, hint "
         "FROM favorite_problems WHERE problem_url = :problem_url");
     query.bindValue(":problem_url", problemUrl);
     if (!query.exec() || !query.next()) {
@@ -359,10 +362,11 @@ ProblemPageInfo FavoriteProblemRepository::readProblem(const QSqlQuery &query) c
     info.timeLimit = query.value(3).toString();
     info.memoryLimit = query.value(4).toString();
     info.description = query.value(5).toString();
-    info.inputSpec = query.value(6).toString();
-    info.outputSpec = query.value(7).toString();
-    info.sampleInput = query.value(8).toString();
-    info.sampleOutput = query.value(9).toString();
-    info.hint = query.value(10).toString();
+    info.starterCode = query.value(6).toString();
+    info.inputSpec = query.value(7).toString();
+    info.outputSpec = query.value(8).toString();
+    info.sampleInput = query.value(9).toString();
+    info.sampleOutput = query.value(10).toString();
+    info.hint = query.value(11).toString();
     return info;
 }

@@ -18,6 +18,7 @@ class HomePage : public QWidget
 
 public:
     explicit HomePage(QWidget *parent = nullptr);
+    void setDarkMode(bool dark);
 
     void showLoggingIn();
     void showLoginFailed(const QString &message);
@@ -30,10 +31,12 @@ public:
 
 signals:
     void classSelected(const QString &name, const QString &url);
+    void refreshRequested();
     void favoritesRequested();
     void storageRequested();
     void aiConfigRequested();
     void logoutRequested();
+    void themeToggleRequested(bool dark);
     void reminderSelected(const QString &title, const QString &url);
 
 private:
@@ -49,10 +52,12 @@ private:
     QPushButton *m_storageButton = nullptr;
     QPushButton *m_aiConfigButton = nullptr;
     QPushButton *m_logoutButton = nullptr;
+    QPushButton *m_themeButton = nullptr;
     QPushButton *m_collapsedFavoritesButton = nullptr;
     QPushButton *m_collapsedStorageButton = nullptr;
     QPushButton *m_collapsedAiConfigButton = nullptr;
     QPushButton *m_collapsedLogoutButton = nullptr;
     QListWidget *m_reminderListWidget = nullptr;
     bool m_toolsExpanded = true;
+    bool m_darkMode = false;
 };

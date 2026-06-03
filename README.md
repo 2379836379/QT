@@ -6,7 +6,6 @@ ai使用codex测试，需配置config.toml
 ### todo:
 contest reminder  
 ui    
-check  
 
 
 ### finished：
@@ -20,7 +19,6 @@ login/Email Verification
 Go server on CLab Ubuntu(OJ-server/ OJ-judger)  
 local test  
 AI  
-
 
 
 

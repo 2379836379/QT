@@ -2,6 +2,33 @@
 
 #include "network/openjudgeclient.h"
 
+#include <QCoreApplication>
+#include <QDateTime>
+#include <QDir>
+#include <QFile>
+#include <QTextStream>
+
+namespace
+{
+void writeStartupLog(const QString &message)
+{
+    QDir dir(QCoreApplication::applicationDirPath());
+    if (dir.dirName().compare("build", Qt::CaseInsensitive) == 0) {
+        dir.cdUp();
+    }
+    dir.mkpath("data");
+
+    QFile file(dir.filePath("data/startup.log"));
+    if (!file.open(QIODevice::Append | QIODevice::Text)) {
+        return;
+    }
+
+    QTextStream stream(&file);
+    stream << QDateTime::currentDateTime().toString("yyyy-MM-dd HH:mm:ss.zzz")
+           << " | " << message << '\n';
+}
+}
+
 SubmitRepository::SubmitRepository(OpenJudgeClient *client, QObject *parent)
     : QObject(parent)
     , m_client(client)
@@ -11,19 +38,24 @@ SubmitRepository::SubmitRepository(OpenJudgeClient *client, QObject *parent)
         &OpenJudgeClient::submitPageFinished,
         this,
         [this](const NetworkResult &result) {
+            writeStartupLog("SubmitRepository: submitPageFinished received");
             if (!m_expectedSubmitPageUrl.isEmpty()
                 && result.finalUrl != m_expectedSubmitPageUrl) {
+                writeStartupLog("SubmitRepository: submitPageFinished ignored due to finalUrl mismatch");
                 return;
             }
 
             m_expectedSubmitPageUrl = QUrl();
             if (!result.ok) {
+                writeStartupLog("SubmitRepository: submitPageFinished network failure");
                 emit requestFailed("submitPage", result.errorString);
                 return;
             }
 
+            writeStartupLog("SubmitRepository: parsing submit page begin");
             emit submitPageFetched(
                 SubmitParser::parseSubmitPage(result.body, result.finalUrl));
+            writeStartupLog("SubmitRepository: parsing submit page end");
         });
 
     connect(
@@ -43,8 +75,10 @@ SubmitRepository::SubmitRepository(OpenJudgeClient *client, QObject *parent)
 
 void SubmitRepository::fetchSubmitPage(const QUrl &submitPageUrl)
 {
+    writeStartupLog("SubmitRepository::fetchSubmitPage begin");
     m_expectedSubmitPageUrl = submitPageUrl;
     m_client->fetchSubmitPage(submitPageUrl);
+    writeStartupLog("SubmitRepository::fetchSubmitPage client fetch called");
 }
 
 void SubmitRepository::submitSolution(const QUrl &submitActionUrl,

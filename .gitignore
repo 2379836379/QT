@@ -1,5 +1,7 @@
 /.vscode
 /build
+/data
+
 
 oj-client/.qtcreator/
 oj-client/build/

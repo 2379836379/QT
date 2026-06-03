@@ -4,6 +4,8 @@
 
 class QLabel;
 class QPushButton;
+class QFrame;
+class QWidget;
 
 class StoragePage : public QWidget
 {
@@ -11,6 +13,7 @@ class StoragePage : public QWidget
 
 public:
     explicit StoragePage(QWidget *parent = nullptr);
+    void setDarkMode(bool dark);
 
     void showSizes(const QString &cacheSize, const QString &appSize);
     void showClearSucceeded(const QString &cacheSize, const QString &appSize);
@@ -19,11 +22,23 @@ public:
 
 signals:
     void backRequested();
+    void homeRequested();
+    void themeToggleRequested(bool dark);
     void clearCacheRequested();
 
 private:
+    void setToolsExpanded(bool expanded);
+
+    QFrame *m_toolsFrame = nullptr;
+    QPushButton *m_toolsToggleButton = nullptr;
+    QWidget *m_toolsPanel = nullptr;
+    QWidget *m_collapsedToolsPanel = nullptr;
+    QPushButton *m_backToolButton = nullptr;
+    QPushButton *m_collapsedBackButton = nullptr;
     QLabel *m_cacheSizeValueLabel = nullptr;
     QLabel *m_appSizeValueLabel = nullptr;
     QLabel *m_statusLabel = nullptr;
     QPushButton *m_clearCacheButton = nullptr;
+    bool m_toolsExpanded = true;
+    bool m_darkMode = false;
 };

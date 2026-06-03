@@ -70,6 +70,7 @@ ClassService::ClassService(ClassRepository *repository,
             }
         });
 
+
     connect(
         m_repository,
         &ClassRepository::requestFailed,

@@ -22,13 +22,19 @@ ClassPage::ClassPage(QWidget *parent)
     topLayout->setContentsMargins(24, 18, 24, 18);
     topLayout->setSpacing(16);
 
-    auto *backButton = new QPushButton("Back", topFrame);
-    backButton->setObjectName("classBackButton");
     m_titleLabel = new QLabel("Course", topFrame);
     m_titleLabel->setObjectName("classTitleLabel");
 
-    topLayout->addWidget(backButton);
     topLayout->addWidget(m_titleLabel, 1);
+    auto *homeButton = new QPushButton("Home", topFrame);
+    homeButton->setObjectName("classRefreshButton");
+    topLayout->addWidget(homeButton, 0, Qt::AlignRight);
+    auto *themeButton = new QPushButton("Dark Mode", topFrame);
+    themeButton->setObjectName("classRefreshButton");
+    topLayout->addWidget(themeButton, 0, Qt::AlignRight);
+    auto *refreshButton = new QPushButton("Refresh", topFrame);
+    refreshButton->setObjectName("classRefreshButton");
+    topLayout->addWidget(refreshButton, 0, Qt::AlignRight);
 
     auto *bottomLayout = new QHBoxLayout();
     bottomLayout->setSpacing(18);
@@ -120,7 +126,7 @@ ClassPage::ClassPage(QWidget *parent)
         "#classToolsToggleButton:hover {"
         "  color: #12343b;"
         "}"
-        "#classBackButton {"
+        "#classRefreshButton {"
         "  min-width: 88px;"
         "  padding: 8px 14px;"
         "  border: 1px solid #cdd7cf;"
@@ -128,7 +134,7 @@ ClassPage::ClassPage(QWidget *parent)
         "  background: #f7f5ef;"
         "  color: #243029;"
         "}"
-        "#classBackButton:hover {"
+        "#classRefreshButton:hover {"
         "  background: #eef4ef;"
         "}"
         "#classToolButton {"
@@ -176,7 +182,11 @@ ClassPage::ClassPage(QWidget *parent)
 
     setToolsExpanded(true);
 
-    connect(backButton, &QPushButton::clicked, this, &ClassPage::backRequested);
+    connect(homeButton, &QPushButton::clicked, this, &ClassPage::homeRequested);
+    connect(themeButton, &QPushButton::clicked, this, [this]() {
+        emit themeToggleRequested(!m_darkMode);
+    });
+    connect(refreshButton, &QPushButton::clicked, this, &ClassPage::refreshRequested);
     connect(m_backToolButton, &QPushButton::clicked, this, &ClassPage::backRequested);
     connect(m_collapsedBackButton, &QPushButton::clicked, this, &ClassPage::backRequested);
     connect(
@@ -248,4 +258,42 @@ void ClassPage::showContestSets(const GroupPageInfo &groupPageInfo)
         auto *item = new QListWidgetItem(text, m_contestListWidget);
         item->setData(Qt::UserRole, contestSet.url);
     }
+}
+
+void ClassPage::setDarkMode(bool dark)
+{
+    m_darkMode = dark;
+    QString lightStyle = property("_lightStyleSheet").toString();
+    if (lightStyle.isEmpty()) {
+        lightStyle = styleSheet();
+        setProperty("_lightStyleSheet", lightStyle);
+    }
+
+    const QString darkOverride =
+        "ClassPage { background: #000000; }"
+        "#classTopFrame, #classLeftFrame, #classContentFrame {"
+        "  background: #1b232c;"
+        "  border: 1px solid #2c3844;"
+        "}"
+        "#classTitleLabel, #classSectionLabel, #classToolsToggleButton, #classToolButton, #classToolIconButton {"
+        "  color: #d9e1e8;"
+        "}"
+        "#classRefreshButton {"
+        "  border: 1px solid #3a4652;"
+        "  background: #202a34;"
+        "  color: #e8edf2;"
+        "}"
+        "#classRefreshButton:hover, #classToolButton:hover, #classToolIconButton:hover {"
+        "  background: #26313c;"
+        "}"
+        "#classContestList { color: #e8edf2; }"
+        "#classContestList::item:selected {"
+        "  background: #234257;"
+        "  color: #eff8ff;"
+        "}"
+        "#classContestList::item:hover {"
+        "  background: #26313c;"
+        "}";
+
+    setStyleSheet(dark ? lightStyle + darkOverride : lightStyle);
 }

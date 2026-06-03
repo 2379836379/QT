@@ -108,6 +108,10 @@ bool ContestCacheRepository::loadContest(
         problem.submission_people = query.value(4).toInt();
         problem.solved = query.value(5).toBool();
         loadedContestInfo.problems << problem;
+        ++loadedContestInfo.totalProblems;
+        if (problem.solved) {
+            ++loadedContestInfo.solvedProblems;
+        }
     }
 
     if (loadedContestInfo.problems.isEmpty()) {

@@ -28,6 +28,61 @@ QString extractDlValue(const QString &html, const QString &key)
 
     return stripHtml(match.captured(1));
 }
+
+QString extractDlValueAny(const QString &html, const QStringList &keys)
+{
+    for (const QString &key : keys) {
+        const QString value = extractDlValue(html, key);
+        if (!value.isEmpty()) {
+            return value;
+        }
+    }
+    return QString();
+}
+
+QString extractSectionHtml(const QString &html, const QString &key)
+{
+    const QString pattern = QString(
+        "<dt>\\s*%1\\s*</dt>([\\s\\S]*?)(?=<dt>|</dl>)")
+                                .arg(QRegularExpression::escape(key));
+    const QRegularExpression regex(
+        pattern,
+        QRegularExpression::CaseInsensitiveOption);
+    const QRegularExpressionMatch match = regex.match(html);
+    return match.hasMatch() ? match.captured(1) : QString();
+}
+
+QString extractPreBlocksText(const QString &html)
+{
+    QStringList blocks;
+    const QRegularExpression preRegex(
+        "<pre[^>]*>([\\s\\S]*?)</pre>",
+        QRegularExpression::CaseInsensitiveOption);
+    QRegularExpressionMatchIterator it = preRegex.globalMatch(html);
+    while (it.hasNext()) {
+        QString block = it.next().captured(1);
+        block.replace("\r\n", "\n");
+        block.replace('\r', '\n');
+        block.replace("&lt;", "<");
+        block.replace("&gt;", ">");
+        block.replace("&amp;", "&");
+        if (!block.trimmed().isEmpty()) {
+            blocks << block.trimmed();
+        }
+    }
+    return blocks.join("\n\n");
+}
+
+QString extractSectionHtmlAny(const QString &html, const QStringList &keys)
+{
+    for (const QString &key : keys) {
+        const QString section = extractSectionHtml(html, key);
+        if (!section.isEmpty()) {
+            return section;
+        }
+    }
+    return QString();
+}
 }
 
 namespace ProblemParser
@@ -48,7 +103,7 @@ ProblemPageInfo parseProblemPage(const QByteArray &html, const QUrl &baseUrl)
     }
 
     const QRegularExpression submitRegex(
-        "<li[^>]*>\\s*<a\\s+href=\"([^\"]+/submit/)\"[^>]*>\\s*提交\\s*</a>\\s*</li>",
+        "<a\\s+href=\"([^\"]+/submit/)\"[^>]*>\\s*(?:提交|鎻愪氦)\\s*</a>",
         QRegularExpression::CaseInsensitiveOption);
     const QRegularExpressionMatch submitMatch = submitRegex.match(text);
     if (submitMatch.hasMatch()) {
@@ -56,16 +111,17 @@ ProblemPageInfo parseProblemPage(const QByteArray &html, const QUrl &baseUrl)
             baseUrl.resolved(QUrl(submitMatch.captured(1))).toString();
     }
 
-    info.timeLimit = extractDlValue(text, "总时间限制:");
-    info.memoryLimit = extractDlValue(text, "内存限制:");
-    info.description = extractDlValue(text, "描述");
-    info.inputSpec = extractDlValue(text, "输入");
-    info.outputSpec = extractDlValue(text, "输出");
-    info.sampleInput = extractDlValue(text, "样例输入");
-    info.sampleOutput = extractDlValue(text, "样例输出");
-    info.hint = extractDlValue(text, "提示");
-    info.tried_people = extractDlValue(text, "尝试人数").toInt();
-    info.passed_people = extractDlValue(text, "通过人数").toInt();
+    info.timeLimit = extractDlValueAny(text, {"总时间限制:", "总时间限制", "鎬绘椂闂撮檺鍒?", "鎬绘椂闂撮檺鍒?"});
+    info.memoryLimit = extractDlValueAny(text, {"内存限制:", "内存限制", "鍐呭瓨闄愬埗:", "鍐呭瓨闄愬埗"});
+    info.description = extractDlValueAny(text, {"描述", "鎻忚堪"});
+    info.starterCode = extractPreBlocksText(extractSectionHtmlAny(text, {"描述", "鎻忚堪"}));
+    info.inputSpec = extractDlValueAny(text, {"输入", "杈撳叆"});
+    info.outputSpec = extractDlValueAny(text, {"输出", "杈撳嚭"});
+    info.sampleInput = extractDlValueAny(text, {"样例输入", "鏍蜂緥杈撳叆"});
+    info.sampleOutput = extractDlValueAny(text, {"样例输出", "鏍蜂緥杈撳嚭"});
+    info.hint = extractDlValueAny(text, {"提示", "鎻愮ず"});
+    info.tried_people = extractDlValueAny(text, {"尝试人数", "灏濊瘯浜烘暟"}).toInt();
+    info.passed_people = extractDlValueAny(text, {"通过人数", "閫氳繃浜烘暟"}).toInt();
     return info;
 }
 }

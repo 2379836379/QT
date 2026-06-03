@@ -2,6 +2,33 @@
 
 #include "repository/submit/submitrepository.h"
 
+#include <QCoreApplication>
+#include <QDateTime>
+#include <QDir>
+#include <QFile>
+#include <QTextStream>
+
+namespace
+{
+void writeStartupLog(const QString &message)
+{
+    QDir dir(QCoreApplication::applicationDirPath());
+    if (dir.dirName().compare("build", Qt::CaseInsensitive) == 0) {
+        dir.cdUp();
+    }
+    dir.mkpath("data");
+
+    QFile file(dir.filePath("data/startup.log"));
+    if (!file.open(QIODevice::Append | QIODevice::Text)) {
+        return;
+    }
+
+    QTextStream stream(&file);
+    stream << QDateTime::currentDateTime().toString("yyyy-MM-dd HH:mm:ss.zzz")
+           << " | " << message << '\n';
+}
+}
+
 SubmitService::SubmitService(SubmitRepository *repository, QObject *parent)
     : QObject(parent)
     , m_repository(repository)
@@ -11,10 +38,13 @@ SubmitService::SubmitService(SubmitRepository *repository, QObject *parent)
         &SubmitRepository::submitPageFetched,
         this,
         [this](const SubmitPageInfo &submitPageInfo) {
+            writeStartupLog("SubmitService: submitPageFetched received");
             m_currentSubmitPageInfo = submitPageInfo;
             m_loading = false;
             emit loadingChanged(false);
+            writeStartupLog("SubmitService: loadingChanged(false) emitted");
             emit submitPageLoaded(submitPageInfo);
+            writeStartupLog("SubmitService: submitPageLoaded emitted");
         });
 
     connect(
@@ -45,10 +75,13 @@ SubmitService::SubmitService(SubmitRepository *repository, QObject *parent)
 
 void SubmitService::openSubmit(const QUrl &submitPageUrl)
 {
+    writeStartupLog("SubmitService::openSubmit begin");
     m_currentSubmitUrl = submitPageUrl;
     m_loading = true;
     emit loadingChanged(true);
+    writeStartupLog("SubmitService::openSubmit loading emitted");
     m_repository->fetchSubmitPage(submitPageUrl);
+    writeStartupLog("SubmitService::openSubmit repository fetch called");
 }
 
 void SubmitService::submitSolution(const QString &language,

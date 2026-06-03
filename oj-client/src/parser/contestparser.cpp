@@ -59,6 +59,10 @@ ContestPageInfo parseContestPage(const QByteArray &html, const QUrl &baseUrl)
             problem.submission_people = submissionsMatch.captured(1).toInt();
         }
         info.problems.append(problem);
+        ++info.totalProblems;
+        if (problem.solved) {
+            ++info.solvedProblems;
+        }
     }
     return info;
 }

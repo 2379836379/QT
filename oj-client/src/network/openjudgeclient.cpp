@@ -1,9 +1,35 @@
 #include "openjudgeclient.h"
 #include "cookiestore.h"
 
+#include <QCoreApplication>
+#include <QDateTime>
 #include <QDebug>
+#include <QDir>
+#include <QFile>
 #include <QHttpMultiPart>
 #include <QHttpPart>
+#include <QTextStream>
+
+namespace
+{
+void writeStartupLog(const QString &message)
+{
+    QDir dir(QCoreApplication::applicationDirPath());
+    if (dir.dirName().compare("build", Qt::CaseInsensitive) == 0) {
+        dir.cdUp();
+    }
+    dir.mkpath("data");
+
+    QFile file(dir.filePath("data/startup.log"));
+    if (!file.open(QIODevice::Append | QIODevice::Text)) {
+        return;
+    }
+
+    QTextStream stream(&file);
+    stream << QDateTime::currentDateTime().toString("yyyy-MM-dd HH:mm:ss.zzz")
+           << " | " << message << '\n';
+}
+}
 
 OpenJudgeClient::OpenJudgeClient(QObject *parent)
     : QObject(parent)
@@ -110,10 +136,14 @@ void OpenJudgeClient::fetchResultPage(const QUrl &url)
 
 void OpenJudgeClient::fetchSubmitPage(const QUrl &url)
 {
+    writeStartupLog("OpenJudgeClient::fetchSubmitPage begin");
     QNetworkReply *reply = m_manager.get(createRequest(url));
+    writeStartupLog("OpenJudgeClient::fetchSubmitPage request issued");
     connectReply(reply, [this](const NetworkResult &result) {
+        writeStartupLog("OpenJudgeClient::fetchSubmitPage reply finished");
         emit submitPageFinished(result);
     });
+    writeStartupLog("OpenJudgeClient::fetchSubmitPage connectReply attached");
 }
 
 void OpenJudgeClient::submitSolution(const QUrl &submitActionUrl,

@@ -12,6 +12,7 @@ class LoginPage : public QWidget
 
 public:
     explicit LoginPage(QWidget *parent = nullptr);
+    void setDarkMode(bool dark);
 
     void showIdle();
     void showLoggingIn();
@@ -40,4 +41,5 @@ private:
     QLineEdit *m_verifyCodeEdit = nullptr;
     QPushButton *m_verifyButton = nullptr;
     QPushButton *m_loginButton = nullptr;
+    bool m_darkMode = false;
 };

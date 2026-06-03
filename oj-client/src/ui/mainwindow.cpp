@@ -41,11 +41,20 @@
 #include "ui/pages/problempage.h"
 #include "ui/pages/storagepage.h"
 
+#include <QAction>
+#include <QApplication>
+#include <QDir>
 #include <QInputDialog>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonValue>
+#include <QMenu>
+#include <QFile>
+#include <QTextStream>
+#include <QTimer>
+#include <QStyle>
+#include <QSystemTrayIcon>
 #include <QWidget>
 
 namespace
@@ -216,18 +225,39 @@ QString formatSubmitResponse(const NetworkResult &result)
     }
     return text;
 }
+
+void writeStartupLog(const QString &message)
+{
+    QDir dir(QCoreApplication::applicationDirPath());
+    if (dir.dirName().compare("build", Qt::CaseInsensitive) == 0) {
+        dir.cdUp();
+    }
+    dir.mkpath("data");
+
+    QFile file(dir.filePath("data/startup.log"));
+    if (!file.open(QIODevice::Append | QIODevice::Text)) {
+        return;
+    }
+
+    QTextStream stream(&file);
+    stream << QDateTime::currentDateTime().toString("yyyy-MM-dd HH:mm:ss.zzz")
+           << " | " << message << '\n';
+}
 }
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
     , ui(new Ui::MainWindow)
 {
+    writeStartupLog("MainWindow: constructor begin");
     ui->setupUi(this);
+    writeStartupLog("MainWindow: ui setup complete");
 
     m_client = new OpenJudgeClient(this);
     m_openAiClient = new OpenAiClient(this);
     m_cookieStore = new CookieStore(m_client);
     m_client->setCookieStore(m_cookieStore);
+    writeStartupLog("MainWindow: core clients created");
 
     m_homeRepository = new HomeRepository(m_client, this);
     m_homeCacheRepository = new HomeCacheRepository();
@@ -241,6 +271,7 @@ MainWindow::MainWindow(QWidget *parent)
     m_resultRepository = new ResultRepository(m_client, this);
     m_submitRepository = new SubmitRepository(m_client, this);
     m_reminderClassRepository = new ClassRepository(m_client, this);
+    writeStartupLog("MainWindow: repositories created");
 
     m_cacheService = new CacheService(m_homeCacheRepository,
                                       m_classCacheRepository,
@@ -251,7 +282,9 @@ MainWindow::MainWindow(QWidget *parent)
     m_loginCacheService = new LoginCacheService(m_loginCacheRepository, this);
     m_emailVerifyService = new EmailVerifyService(this);
     m_applicationSizeService = new ApplicationSizeService(this);
+    writeStartupLog("MainWindow: app services created");
     const OpenAiConfig openAiConfig = AppConfig::loadOpenAiConfig();
+    writeStartupLog("MainWindow: openai config loaded");
     m_openAiClient->setBaseUrl(openAiConfig.baseUrl);
     m_aiService = new AiService(m_openAiClient, this);
     m_aiService->setConfig(openAiConfig);
@@ -313,6 +346,7 @@ MainWindow::MainWindow(QWidget *parent)
             }
             m_submitService->submitSolution(languageValue, sourceText);
         }});
+    writeStartupLog("MainWindow: ai service configured");
     m_aiConfigSummary = QString("Config: %1 | model: %2")
                             .arg(openAiConfig.sourcePath.isEmpty()
                                      ? QString("defaults")
@@ -334,12 +368,31 @@ MainWindow::MainWindow(QWidget *parent)
         m_reminderClassRepository,
         m_classCacheRepository,
         this);
+    writeStartupLog("MainWindow: domain services created");
 
     setupUiState();
+    writeStartupLog("MainWindow: setupUiState complete");
+    setupTrayIcon();
+    writeStartupLog("MainWindow: setupTrayIcon complete");
     connectSignals();
+    writeStartupLog("MainWindow: connectSignals complete");
+    ensureStartupVisible();
+    writeStartupLog("MainWindow: ensureStartupVisible complete");
+    QTimer::singleShot(0, this, [this]() {
+        writeStartupLog("MainWindow: deferred initialization begin");
+        if (m_loginCacheService->initialize()) {
+            CachedLoginInfo loginInfo;
+            if (m_loginCacheService->loadLastLogin(&loginInfo)) {
+                m_loginPage->setCredentials(loginInfo.email, loginInfo.password);
+            }
+        }
+        applyLoginCacheState(m_loginPage->email());
 
-    if (!m_favoriteProblemService->initialize()) {
-    }
+        if (!m_favoriteProblemService->initialize()) {
+        }
+        writeStartupLog("MainWindow: deferred initialization complete");
+    });
+    writeStartupLog("MainWindow: constructor end");
 }
 
 MainWindow::~MainWindow()
@@ -355,14 +408,23 @@ MainWindow::~MainWindow()
 
 void MainWindow::setupUiState()
 {
+    writeStartupLog("MainWindow: setupUiState begin");
     m_loginPage = new LoginPage(this);
+    writeStartupLog("MainWindow: login page created");
     m_homePage = new HomePage(this);
+    writeStartupLog("MainWindow: home page created");
     m_aiConfigPage = new AiConfigPage(this);
+    writeStartupLog("MainWindow: ai config page created");
     m_classPage = new ClassPage(this);
+    writeStartupLog("MainWindow: class page created");
     m_contestPage = new ContestPage(this);
+    writeStartupLog("MainWindow: contest page created");
     m_problemPage = new ProblemPage(this);
+    writeStartupLog("MainWindow: problem page created");
     m_favoritePage = new FavoritePage(this);
+    writeStartupLog("MainWindow: favorite page created");
     m_storagePage = new StoragePage(this);
+    writeStartupLog("MainWindow: storage page created");
 
     ui->pageStack->addWidget(m_loginPage);
     ui->pageStack->addWidget(m_homePage);
@@ -372,20 +434,75 @@ void MainWindow::setupUiState()
     ui->pageStack->addWidget(m_problemPage);
     ui->pageStack->addWidget(m_favoritePage);
     ui->pageStack->addWidget(m_storagePage);
+    writeStartupLog("MainWindow: pages added to stack");
 
-    if (m_loginCacheService->initialize()) {
-        CachedLoginInfo loginInfo;
-        if (m_loginCacheService->loadLastLogin(&loginInfo)) {
-            m_loginPage->setCredentials(loginInfo.email, loginInfo.password);
-        }
-    }
-    applyLoginCacheState(m_loginPage->email());
     m_problemPage->setAiConfigSummary(m_aiConfigSummary);
+    writeStartupLog("MainWindow: problem page ai summary set");
     QString configPath;
     m_aiConfigPage->setConfigText(configPath = m_aiService->config().sourcePath,
                                   AppConfig::loadConfigText(&configPath));
+    writeStartupLog("MainWindow: ai config text loaded");
 
     showRootPage(m_loginPage);
+    writeStartupLog("MainWindow: setupUiState end");
+}
+
+void MainWindow::setupTrayIcon()
+{
+    if (!QSystemTrayIcon::isSystemTrayAvailable()) {
+        return;
+    }
+
+    m_trayIcon = new QSystemTrayIcon(this);
+    QIcon trayIcon = windowIcon();
+    if (trayIcon.isNull()) {
+        trayIcon = style()->standardIcon(QStyle::SP_MessageBoxInformation);
+    }
+    m_trayIcon->setIcon(trayIcon);
+    m_trayIcon->setToolTip("oj-client");
+
+    m_trayMenu = new QMenu(this);
+    m_restoreTrayAction = m_trayMenu->addAction("Restore");
+    m_exitTrayAction = m_trayMenu->addAction("Exit");
+    m_trayIcon->setContextMenu(m_trayMenu);
+
+    connect(m_restoreTrayAction, &QAction::triggered, this, [this]() {
+        restoreFromTray();
+    });
+    connect(m_exitTrayAction, &QAction::triggered, this, [this]() {
+        m_allowClose = true;
+        if (m_trayIcon != nullptr) {
+            m_trayIcon->hide();
+        }
+        qApp->quit();
+    });
+    connect(
+        m_trayIcon,
+        &QSystemTrayIcon::activated,
+        this,
+        [this](QSystemTrayIcon::ActivationReason reason) {
+            if (reason == QSystemTrayIcon::Trigger
+                || reason == QSystemTrayIcon::DoubleClick) {
+                restoreFromTray();
+            }
+        });
+
+    m_trayIcon->show();
+}
+
+void MainWindow::ensureStartupVisible()
+{
+    setWindowState((windowState() & ~Qt::WindowMinimized) | Qt::WindowActive);
+    showNormal();
+    raise();
+    activateWindow();
+
+    QTimer::singleShot(0, this, [this]() {
+        setWindowState((windowState() & ~Qt::WindowMinimized) | Qt::WindowActive);
+        showNormal();
+        raise();
+        activateWindow();
+    });
 }
 
 void MainWindow::connectSignals()
@@ -531,6 +648,31 @@ void MainWindow::connectSignals()
 
     connect(
         m_homePage,
+        &HomePage::themeToggleRequested,
+        this,
+        [this](bool dark) {
+            applyDarkMode(dark);
+        });
+    connect(m_classPage, &ClassPage::themeToggleRequested, this, [this](bool dark) {
+        applyDarkMode(dark);
+    });
+    connect(m_contestPage, &ContestPage::themeToggleRequested, this, [this](bool dark) {
+        applyDarkMode(dark);
+    });
+    connect(m_problemPage, &ProblemPage::themeToggleRequested, this, [this](bool dark) {
+        applyDarkMode(dark);
+    });
+    connect(m_favoritePage, &FavoritePage::themeToggleRequested, this, [this](bool dark) {
+        applyDarkMode(dark);
+    });
+    connect(m_storagePage, &StoragePage::themeToggleRequested, this, [this](bool dark) {
+        applyDarkMode(dark);
+    });
+    connect(m_aiConfigPage, &AiConfigPage::themeToggleRequested, this, [this](bool dark) {
+        applyDarkMode(dark);
+    });
+    connect(
+        m_homePage,
         &HomePage::classSelected,
         this,
         [this](const QString &name, const QString &url) {
@@ -547,6 +689,18 @@ void MainWindow::connectSignals()
             m_favoritePage->showFolders(
                 m_favoriteProblemService->loadFolders());
             pushPage(m_favoritePage);
+        });
+    connect(
+        m_homePage,
+        &HomePage::refreshRequested,
+        this,
+        [this]() {
+            const QUrl homeUrl = m_homeService->currentHomeUrl();
+            if (!homeUrl.isValid() || homeUrl.scheme().isEmpty()) {
+                return;
+            }
+            m_homePage->showOpeningHome();
+            m_homeService->openHome(homeUrl);
         });
     connect(
         m_homePage,
@@ -593,6 +747,9 @@ void MainWindow::connectSignals()
         });
 
     connect(m_classPage, &ClassPage::backRequested, this, &MainWindow::popPage);
+    connect(m_classPage, &ClassPage::homeRequested, this, [this]() {
+        showRootPage(m_homePage);
+    });
     connect(
         m_classPage,
         &ClassPage::contestSelected,
@@ -604,6 +761,9 @@ void MainWindow::connectSignals()
         });
 
     connect(m_contestPage, &ContestPage::backRequested, this, &MainWindow::popPage);
+    connect(m_contestPage, &ContestPage::homeRequested, this, [this]() {
+        showRootPage(m_homePage);
+    });
     connect(
         m_contestPage,
         &ContestPage::problemSelected,
@@ -613,6 +773,24 @@ void MainWindow::connectSignals()
         });
 
     connect(m_problemPage, &ProblemPage::backRequested, this, &MainWindow::popPage);
+    connect(m_problemPage, &ProblemPage::homeRequested, this, [this]() {
+        showRootPage(m_homePage);
+    });
+    connect(
+        m_problemPage,
+        &ProblemPage::refreshRequested,
+        this,
+        [this]() {
+            const QUrl problemUrl = m_problemService->currentProblemUrl();
+            if (!problemUrl.isValid() || problemUrl.scheme().isEmpty()) {
+                return;
+            }
+            m_problemPage->openProblem(
+                m_currentProblemInfo.title.isEmpty()
+                    ? m_problemPage->windowTitle()
+                    : m_currentProblemInfo.title);
+            m_problemService->openProblem(problemUrl);
+        });
     connect(
         m_problemPage,
         &ProblemPage::favoriteRequested,
@@ -671,6 +849,9 @@ void MainWindow::connectSignals()
         });
 
     connect(m_favoritePage, &FavoritePage::backRequested, this, &MainWindow::popPage);
+    connect(m_favoritePage, &FavoritePage::homeRequested, this, [this]() {
+        showRootPage(m_homePage);
+    });
     connect(
         m_favoritePage,
         &FavoritePage::refreshRequested,
@@ -743,7 +924,13 @@ void MainWindow::connectSignals()
                 m_favoriteProblemService->loadFavoritesInFolder(folderId));
         });
     connect(m_storagePage, &StoragePage::backRequested, this, &MainWindow::popPage);
+    connect(m_storagePage, &StoragePage::homeRequested, this, [this]() {
+        showRootPage(m_homePage);
+    });
     connect(m_aiConfigPage, &AiConfigPage::backRequested, this, &MainWindow::popPage);
+    connect(m_aiConfigPage, &AiConfigPage::homeRequested, this, [this]() {
+        showRootPage(m_homePage);
+    });
     connect(
         m_aiConfigPage,
         &AiConfigPage::saveRequested,
@@ -898,8 +1085,10 @@ void MainWindow::connectSignals()
         &SubmitService::submitPageLoaded,
         this,
         [this](const SubmitPageInfo &submitPageInfo) {
+            writeStartupLog("MainWindow: submitPageLoaded signal received");
             m_problemPage->showSubmitPageLoaded(
                 submitPageInfo, m_submitService->defaultLanguage());
+            writeStartupLog("MainWindow: problem page showSubmitPageLoaded returned");
         });
     connect(
         m_submitService,
@@ -990,6 +1179,18 @@ void MainWindow::connectSignals()
             }
         });
     connect(
+        m_classPage,
+        &ClassPage::refreshRequested,
+        this,
+        [this]() {
+            const QUrl classUrl = m_classService->currentClassUrl();
+            if (!classUrl.isValid() || classUrl.scheme().isEmpty()) {
+                return;
+            }
+            m_classPage->showLoadingContests();
+            m_classService->openClass(classUrl);
+        });
+    connect(
         m_classService,
         &ClassService::failed,
         this,
@@ -1012,6 +1213,18 @@ void MainWindow::connectSignals()
             if (loading) {
                 m_contestPage->showLoadingProblems();
             }
+        });
+    connect(
+        m_contestPage,
+        &ContestPage::refreshRequested,
+        this,
+        [this]() {
+            const QUrl contestUrl = m_contestService->currentContestUrl();
+            if (!contestUrl.isValid() || contestUrl.scheme().isEmpty()) {
+                return;
+            }
+            m_contestPage->showLoadingProblems();
+            m_contestService->openContest(contestUrl);
         });
     connect(
         m_contestService,
@@ -1047,11 +1260,17 @@ void MainWindow::connectSignals()
         &ProblemService::problemLoaded,
         this,
         [this](const ProblemPageInfo &problemPageInfo) {
+            writeStartupLog("MainWindow: problemLoaded signal received");
             setCurrentProblem(problemPageInfo);
+            writeStartupLog("MainWindow: current problem set");
             m_problemPage->showProblem(problemPageInfo);
+            writeStartupLog("MainWindow: problem page content shown");
             if (!problemPageInfo.submitUrl.isEmpty()) {
+                writeStartupLog("MainWindow: openSubmit begin");
                 m_problemPage->openSubmit(problemPageInfo);
+                writeStartupLog("MainWindow: problem page openSubmit returned");
                 m_submitService->openSubmit(QUrl(problemPageInfo.submitUrl));
+                writeStartupLog("MainWindow: submitService openSubmit called");
             }
         });
 }
@@ -1095,6 +1314,48 @@ void MainWindow::setCurrentProblem(const ProblemPageInfo &problemPageInfo)
     m_problemPage->setFavoriteEnabled(m_hasCurrentProblem);
     m_problemPage->setSubmitEnabled(
         m_hasCurrentProblem && !problemPageInfo.submitUrl.isEmpty());
+}
+
+void MainWindow::applyDarkMode(bool dark)
+{
+    m_darkMode = dark;
+    if (ui != nullptr) {
+        const QString rootStyle = dark
+            ? QString(
+                  "#centralwidget, #pageStack {"
+                  "  background: #000000;"
+                  "}")
+            : QString(
+                  "#centralwidget, #pageStack {"
+                  "  background: #ffffff;"
+                  "}");
+        ui->centralwidget->setStyleSheet(rootStyle);
+        ui->pageStack->setStyleSheet(rootStyle);
+    }
+    if (m_loginPage != nullptr) {
+        m_loginPage->setDarkMode(dark);
+    }
+    if (m_homePage != nullptr) {
+        m_homePage->setDarkMode(dark);
+    }
+    if (m_classPage != nullptr) {
+        m_classPage->setDarkMode(dark);
+    }
+    if (m_contestPage != nullptr) {
+        m_contestPage->setDarkMode(dark);
+    }
+    if (m_problemPage != nullptr) {
+        m_problemPage->setDarkMode(dark);
+    }
+    if (m_favoritePage != nullptr) {
+        m_favoritePage->setDarkMode(dark);
+    }
+    if (m_storagePage != nullptr) {
+        m_storagePage->setDarkMode(dark);
+    }
+    if (m_aiConfigPage != nullptr) {
+        m_aiConfigPage->setDarkMode(dark);
+    }
 }
 
 void MainWindow::openProblemPage(const QString &problemUrl,
@@ -1181,6 +1442,31 @@ void MainWindow::saveCurrentProblemToFavorites()
             selectedFolderName,
             m_favoriteProblemService->loadFavoritesInFolder(folderId));
     }
+}
+
+void MainWindow::closeEvent(QCloseEvent *event)
+{
+    if (m_allowClose || m_trayIcon == nullptr || !m_trayIcon->isVisible()) {
+        QMainWindow::closeEvent(event);
+        return;
+    }
+
+    hide();
+    event->ignore();
+    if (!m_trayNoticeShown) {
+        m_trayIcon->showMessage("oj-client",
+                                "Application is still running in the system tray.",
+                                QSystemTrayIcon::Information,
+                                3000);
+        m_trayNoticeShown = true;
+    }
+}
+
+void MainWindow::restoreFromTray()
+{
+    showNormal();
+    raise();
+    activateWindow();
 }
 
 bool MainWindow::requiresEmailVerification(const QString &email) const

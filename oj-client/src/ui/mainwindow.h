@@ -3,6 +3,7 @@
 
 #include "parser/problemparser.h"
 
+#include <QCloseEvent>
 #include <QMainWindow>
 #include <QVector>
 
@@ -48,6 +49,9 @@ class ProblemPage;
 class FavoritePage;
 class StoragePage;
 class QWidget;
+class QAction;
+class QMenu;
+class QSystemTrayIcon;
 
 class MainWindow : public QMainWindow
 {
@@ -57,12 +61,19 @@ public:
     explicit MainWindow(QWidget *parent = nullptr);
     ~MainWindow() override;
 
+protected:
+    void closeEvent(QCloseEvent *event) override;
+
 private:
     void setupUiState();
     void connectSignals();
+    void setupTrayIcon();
+    void ensureStartupVisible();
+    void restoreFromTray();
     void showRootPage(QWidget *page);
     void pushPage(QWidget *page);
     void popPage();
+    void applyDarkMode(bool dark);
     void setCurrentProblem(const ProblemPageInfo &problemPageInfo);
     void openProblemPage(const QString &problemUrl,
                          const QString &problemTitle,
@@ -121,6 +132,13 @@ private:
     QString m_aiConfigSummary;
     QString m_pendingAiRunTestCallId;
     QString m_pendingAiSubmitCallId;
+    QSystemTrayIcon *m_trayIcon = nullptr;
+    QMenu *m_trayMenu = nullptr;
+    QAction *m_restoreTrayAction = nullptr;
+    QAction *m_exitTrayAction = nullptr;
+    bool m_allowClose = false;
+    bool m_trayNoticeShown = false;
+    bool m_darkMode = false;
 };
 
 #endif // MAINWINDOW_H

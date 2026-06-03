@@ -22,13 +22,19 @@ ContestPage::ContestPage(QWidget *parent)
     topLayout->setContentsMargins(24, 18, 24, 18);
     topLayout->setSpacing(16);
 
-    auto *backButton = new QPushButton("Back", topFrame);
-    backButton->setObjectName("contestBackButton");
     m_titleLabel = new QLabel("Contest Set", topFrame);
     m_titleLabel->setObjectName("contestTitleLabel");
 
-    topLayout->addWidget(backButton);
     topLayout->addWidget(m_titleLabel, 1);
+    auto *homeButton = new QPushButton("Home", topFrame);
+    homeButton->setObjectName("contestRefreshButton");
+    topLayout->addWidget(homeButton, 0, Qt::AlignRight);
+    auto *themeButton = new QPushButton("Dark Mode", topFrame);
+    themeButton->setObjectName("contestRefreshButton");
+    topLayout->addWidget(themeButton, 0, Qt::AlignRight);
+    auto *refreshButton = new QPushButton("Refresh", topFrame);
+    refreshButton->setObjectName("contestRefreshButton");
+    topLayout->addWidget(refreshButton, 0, Qt::AlignRight);
 
     auto *bottomLayout = new QHBoxLayout();
     bottomLayout->setSpacing(18);
@@ -120,7 +126,7 @@ ContestPage::ContestPage(QWidget *parent)
         "#contestToolsToggleButton:hover {"
         "  color: #12343b;"
         "}"
-        "#contestBackButton {"
+        "#contestRefreshButton {"
         "  min-width: 88px;"
         "  padding: 8px 14px;"
         "  border: 1px solid #cdd7cf;"
@@ -128,7 +134,7 @@ ContestPage::ContestPage(QWidget *parent)
         "  background: #f7f5ef;"
         "  color: #243029;"
         "}"
-        "#contestBackButton:hover {"
+        "#contestRefreshButton:hover {"
         "  background: #eef4ef;"
         "}"
         "#contestToolButton {"
@@ -176,7 +182,11 @@ ContestPage::ContestPage(QWidget *parent)
 
     setToolsExpanded(true);
 
-    connect(backButton, &QPushButton::clicked, this, &ContestPage::backRequested);
+    connect(homeButton, &QPushButton::clicked, this, &ContestPage::homeRequested);
+    connect(themeButton, &QPushButton::clicked, this, [this]() {
+        emit themeToggleRequested(!m_darkMode);
+    });
+    connect(refreshButton, &QPushButton::clicked, this, &ContestPage::refreshRequested);
     connect(m_backToolButton, &QPushButton::clicked, this, &ContestPage::backRequested);
     connect(m_collapsedBackButton, &QPushButton::clicked, this, &ContestPage::backRequested);
     connect(
@@ -240,9 +250,48 @@ void ContestPage::showContestLoadFailed(const QString &message)
 void ContestPage::showProblems(const ContestPageInfo &contestPageInfo)
 {
     m_problemListWidget->clear();
+    m_titleLabel->setText(m_contestTitle.isEmpty() ? QString("Contest Set") : m_contestTitle);
     for (const ContestProblemInfo &problem : contestPageInfo.problems) {
         const QString text = QString("%1 %2").arg(problem.problemId, problem.title);
         auto *item = new QListWidgetItem(text, m_problemListWidget);
         item->setData(Qt::UserRole, problem.problemUrl);
     }
+}
+
+void ContestPage::setDarkMode(bool dark)
+{
+    m_darkMode = dark;
+    QString lightStyle = property("_lightStyleSheet").toString();
+    if (lightStyle.isEmpty()) {
+        lightStyle = styleSheet();
+        setProperty("_lightStyleSheet", lightStyle);
+    }
+
+    const QString darkOverride =
+        "ContestPage { background: #000000; }"
+        "#contestTopFrame, #contestLeftFrame, #contestContentFrame {"
+        "  background: #1b232c;"
+        "  border: 1px solid #2c3844;"
+        "}"
+        "#contestTitleLabel, #contestSectionLabel, #contestToolsToggleButton, #contestToolButton, #contestToolIconButton {"
+        "  color: #d9e1e8;"
+        "}"
+        "#contestRefreshButton {"
+        "  border: 1px solid #3a4652;"
+        "  background: #202a34;"
+        "  color: #e8edf2;"
+        "}"
+        "#contestRefreshButton:hover, #contestToolButton:hover, #contestToolIconButton:hover {"
+        "  background: #26313c;"
+        "}"
+        "#contestProblemList { color: #e8edf2; }"
+        "#contestProblemList::item:selected {"
+        "  background: #234257;"
+        "  color: #eff8ff;"
+        "}"
+        "#contestProblemList::item:hover {"
+        "  background: #26313c;"
+        "}";
+
+    setStyleSheet(dark ? lightStyle + darkOverride : lightStyle);
 }

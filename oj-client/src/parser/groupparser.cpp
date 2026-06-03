@@ -12,7 +12,6 @@ QString stripHtml(const QString &html)
     text.remove(QRegularExpression("<[^>]+>"));
     return text.simplified();
 }
-
 }
 
 //
@@ -71,8 +70,8 @@ GroupPageInfo parseGroupPage(const QByteArray &html, const QUrl &baseUrl)
             }
         }
         info.contestSets.append(contestSet);
-        
     }
+
     return info;
 }
 }
