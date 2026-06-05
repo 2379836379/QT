@@ -166,7 +166,20 @@ void ReminderService::emitCombinedReminders()
         [](const DeadlineReminder &lhs, const DeadlineReminder &rhs) {
             return lhs.deadline < rhs.deadline;
         });
-    emit remindersUpdated(combined);
+
+    QList<DeadlineReminder> deduplicated;
+    QStringList seenContestUrls;
+    for (const DeadlineReminder &reminder : combined) {
+        const QString normalizedUrl = reminder.contestUrl.trimmed();
+        if (!normalizedUrl.isEmpty() && seenContestUrls.contains(normalizedUrl)) {
+            continue;
+        }
+        if (!normalizedUrl.isEmpty()) {
+            seenContestUrls.append(normalizedUrl);
+        }
+        deduplicated.append(reminder);
+    }
+    emit remindersUpdated(deduplicated);
 }
 
 QDateTime ReminderService::parseDeadline(const QString &text) const

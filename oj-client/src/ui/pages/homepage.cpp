@@ -11,6 +11,8 @@
 #include <QUrl>
 #include <QVBoxLayout>
 
+#include <algorithm>
+
 namespace
 {
 QString buildHomePageStyle(bool dark)
@@ -286,7 +288,7 @@ HomePage::HomePage(QWidget *parent)
 
     m_favoritesButton = new QPushButton("Open Favorites", m_toolsPanel);
     m_favoritesButton->setObjectName("homeToolButton");
-    m_storageButton = new QPushButton("Storage", m_toolsPanel);
+    m_storageButton = new QPushButton("Set", m_toolsPanel);
     m_storageButton->setObjectName("homeToolButton");
     m_aiConfigButton = new QPushButton("AI Config", m_toolsPanel);
     m_aiConfigButton->setObjectName("homeToolButton");
@@ -304,7 +306,7 @@ HomePage::HomePage(QWidget *parent)
     m_collapsedFavoritesButton->setToolTip("Open Favorites");
     m_collapsedStorageButton = new QPushButton("S", m_collapsedToolsPanel);
     m_collapsedStorageButton->setObjectName("homeToolIconButton");
-    m_collapsedStorageButton->setToolTip("Storage");
+    m_collapsedStorageButton->setToolTip("Set");
     m_collapsedAiConfigButton = new QPushButton("A", m_collapsedToolsPanel);
     m_collapsedAiConfigButton->setObjectName("homeToolIconButton");
     m_collapsedAiConfigButton->setToolTip("AI Config");
@@ -520,6 +522,13 @@ void HomePage::showReminders(const QList<DeadlineReminder> &reminders)
             visibleReminders.append(reminder);
         }
     }
+
+    std::sort(
+        visibleReminders.begin(),
+        visibleReminders.end(),
+        [](const DeadlineReminder &lhs, const DeadlineReminder &rhs) {
+            return lhs.deadline < rhs.deadline;
+        });
 
     if (visibleReminders.isEmpty()) {
         new QListWidgetItem("No contest deadlines within one week.", m_reminderListWidget);

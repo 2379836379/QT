@@ -83,6 +83,21 @@ QUrl responsesUrl(const QUrl &baseUrl)
     return url;
 }
 
+QUrl chatCompletionsUrl(const QUrl &baseUrl)
+{
+    QUrl url(baseUrl);
+    QString path = url.path();
+    if (path.isEmpty()) {
+        path = "/";
+    }
+    if (!path.endsWith('/')) {
+        path += '/';
+    }
+    path += "chat/completions";
+    url.setPath(path);
+    return url;
+}
+
 bool processEventBlock(const QByteArray &block,
                        const std::shared_ptr<StreamState> &state,
                        OpenAiClient *client)
@@ -234,6 +249,123 @@ void OpenAiClient::createResponseStream(const QString &apiKey,
             }
         }
 
+        reply->deleteLater();
+    });
+}
+
+void OpenAiClient::createResponse(const QString &apiKey, const QJsonObject &payload)
+{
+    QUrl url = responsesUrl(m_baseUrl);
+    QNetworkRequest request(url);
+    request.setTransferTimeout(30000);
+    request.setHeader(QNetworkRequest::ContentTypeHeader,
+                      "application/json; charset=utf-8");
+    request.setRawHeader("Accept", "application/json");
+    request.setRawHeader("Authorization",
+                         "Bearer " + apiKey.trimmed().toUtf8());
+
+    QJsonObject requestPayload = payload;
+    requestPayload["stream"] = false;
+
+    QNetworkReply *reply = m_manager.post(
+        request,
+        QJsonDocument(requestPayload).toJson(QJsonDocument::Compact));
+
+    connect(reply, &QNetworkReply::finished, this, [this, reply]() {
+        const QByteArray body = reply->readAll();
+        if (reply->error() != QNetworkReply::NoError) {
+            QString message =
+                QString("OpenAI request failed.\nHTTP status: %1\nEndpoint: %2\n%3")
+                    .arg(QString::number(reply->attribute(
+                                             QNetworkRequest::HttpStatusCodeAttribute)
+                                             .toInt()),
+                         reply->url().toString(),
+                         reply->errorString());
+            const QJsonDocument errorDocument = QJsonDocument::fromJson(body);
+            if (errorDocument.isObject()) {
+                const QString apiMessage = errorDocument.object()
+                                               .value("error")
+                                               .toObject()
+                                               .value("message")
+                                               .toString();
+                if (!apiMessage.isEmpty()) {
+                    message += "\n" + apiMessage;
+                }
+            }
+            if (!body.trimmed().isEmpty()) {
+                message += "\n\nRaw body:\n" + QString::fromUtf8(body);
+            }
+            emit requestFailed(message);
+            reply->deleteLater();
+            return;
+        }
+
+        const QJsonDocument document = QJsonDocument::fromJson(body);
+        if (!document.isObject()) {
+            QString message =
+                QString("OpenAI response could not be parsed.\nEndpoint: %1")
+                    .arg(reply->url().toString());
+            if (!body.trimmed().isEmpty()) {
+                message += "\n\nRaw body:\n" + QString::fromUtf8(body);
+            }
+            emit requestFailed(message);
+            reply->deleteLater();
+            return;
+        }
+
+        emit responseCompleted(document.object());
+        reply->deleteLater();
+    });
+}
+
+void OpenAiClient::createChatCompletion(const QString &apiKey,
+                                        const QJsonObject &payload)
+{
+    QUrl url = chatCompletionsUrl(m_baseUrl);
+    QNetworkRequest request(url);
+    request.setTransferTimeout(30000);
+    request.setHeader(QNetworkRequest::ContentTypeHeader,
+                      "application/json; charset=utf-8");
+    request.setRawHeader("Accept", "application/json");
+    request.setRawHeader("Authorization",
+                         "Bearer " + apiKey.trimmed().toUtf8());
+
+    QNetworkReply *reply = m_manager.post(
+        request,
+        QJsonDocument(payload).toJson(QJsonDocument::Compact));
+
+    connect(reply, &QNetworkReply::finished, this, [this, reply]() {
+        const QByteArray body = reply->readAll();
+        if (reply->error() != QNetworkReply::NoError) {
+            QString message =
+                QString("OpenAI request failed.\nHTTP status: %1\nEndpoint: %2\n%3")
+                    .arg(QString::number(reply->attribute(
+                                             QNetworkRequest::HttpStatusCodeAttribute)
+                                             .toInt()),
+                         reply->url().toString(),
+                         reply->errorString());
+            if (!body.trimmed().isEmpty()) {
+                message += "\n\nRaw body:\n" + QString::fromUtf8(body);
+            }
+            emit requestFailed(message);
+            reply->deleteLater();
+            return;
+        }
+
+        const QJsonDocument document = QJsonDocument::fromJson(body);
+        if (!document.isObject()) {
+            QString message =
+                QString("OpenAI response could not be parsed.\nEndpoint: %1")
+                    .arg(reply->url().toString());
+            if (!body.trimmed().isEmpty()) {
+                message += "\n\nRaw body:\n" + QString::fromUtf8(body);
+            }
+            emit requestFailed(message);
+            reply->deleteLater();
+            return;
+        }
+
+        emit responseCompleted(document.object());
         reply->deleteLater();
     });
 }

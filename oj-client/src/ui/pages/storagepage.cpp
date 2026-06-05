@@ -1,10 +1,73 @@
 #include "ui/pages/storagepage.h"
 
+#include <QAbstractButton>
 #include <QFrame>
 #include <QHBoxLayout>
 #include <QLabel>
+#include <QPainter>
 #include <QPushButton>
+#include <QVariantAnimation>
 #include <QVBoxLayout>
+
+namespace
+{
+class SlideSwitch final : public QAbstractButton
+{
+public:
+    explicit SlideSwitch(QWidget *parent = nullptr)
+        : QAbstractButton(parent)
+    {
+        setCheckable(true);
+        setCursor(Qt::PointingHandCursor);
+        setFixedSize(54, 28);
+
+        m_animation = new QVariantAnimation(this);
+        m_animation->setDuration(140);
+        m_animation->setEasingCurve(QEasingCurve::OutCubic);
+        connect(m_animation, &QVariantAnimation::valueChanged, this, [this](const QVariant &value) {
+            m_offset = value.toReal();
+            update();
+        });
+
+        connect(this, &QAbstractButton::toggled, this, [this](bool checked) {
+            m_animation->stop();
+            m_animation->setStartValue(m_offset);
+            m_animation->setEndValue(checked ? 1.0 : 0.0);
+            m_animation->start();
+            update();
+        });
+    }
+
+protected:
+    void paintEvent(QPaintEvent *event) override
+    {
+        Q_UNUSED(event);
+
+        QPainter painter(this);
+        painter.setRenderHint(QPainter::Antialiasing, true);
+
+        const QRectF trackRect(1, 1, width() - 2, height() - 2);
+        const QColor trackColor =
+            isChecked() ? QColor("#3b82f6") : QColor("#b9c1c9");
+        painter.setPen(Qt::NoPen);
+        painter.setBrush(trackColor);
+        painter.drawRoundedRect(trackRect, trackRect.height() / 2, trackRect.height() / 2);
+
+        const qreal knobSize = height() - 6.0;
+        const qreal minX = 3.0;
+        const qreal maxX = width() - knobSize - 3.0;
+        const qreal knobX = minX + (maxX - minX) * m_offset;
+        const QRectF knobRect(knobX, 3.0, knobSize, knobSize);
+
+        painter.setBrush(QColor("#ffffff"));
+        painter.drawEllipse(knobRect);
+    }
+
+private:
+    qreal m_offset = 0.0;
+    QVariantAnimation *m_animation = nullptr;
+};
+}
 
 StoragePage::StoragePage(QWidget *parent)
     : QWidget(parent)
@@ -20,7 +83,7 @@ StoragePage::StoragePage(QWidget *parent)
     topLayout->setContentsMargins(24, 18, 24, 18);
     topLayout->setSpacing(16);
 
-    auto *titleLabel = new QLabel("Storage", topFrame);
+    auto *titleLabel = new QLabel("Set", topFrame);
     titleLabel->setObjectName("storageTitleLabel");
 
     topLayout->addWidget(titleLabel, 1);
@@ -91,6 +154,24 @@ StoragePage::StoragePage(QWidget *parent)
     appRow->addStretch();
     appRow->addWidget(m_appSizeValueLabel);
 
+    auto *alarmRow = new QHBoxLayout();
+    auto *alarmLabel = new QLabel("Alarm", contentFrame);
+    alarmLabel->setObjectName("storageLabel");
+    m_alarmToggleButton = new SlideSwitch(contentFrame);
+    m_alarmToggleButton->setCheckable(true);
+    alarmRow->addWidget(alarmLabel);
+    alarmRow->addStretch();
+    alarmRow->addWidget(m_alarmToggleButton);
+
+    auto *autoRow = new QHBoxLayout();
+    auto *autoLabel = new QLabel("Auto", contentFrame);
+    autoLabel->setObjectName("storageLabel");
+    m_autoToggleButton = new SlideSwitch(contentFrame);
+    m_autoToggleButton->setCheckable(true);
+    autoRow->addWidget(autoLabel);
+    autoRow->addStretch();
+    autoRow->addWidget(m_autoToggleButton);
+
     m_statusLabel = new QLabel(contentFrame);
     m_statusLabel->setObjectName("storageStatusLabel");
     m_statusLabel->setWordWrap(true);
@@ -100,9 +181,11 @@ StoragePage::StoragePage(QWidget *parent)
 
     contentLayout->addLayout(cacheRow);
     contentLayout->addLayout(appRow);
+    contentLayout->addLayout(alarmRow);
+    contentLayout->addLayout(autoRow);
     contentLayout->addWidget(m_statusLabel);
-    contentLayout->addWidget(m_clearCacheButton, 0, Qt::AlignLeft);
     contentLayout->addStretch();
+    contentLayout->addWidget(m_clearCacheButton, 0, Qt::AlignLeft);
 
     bottomLayout->addWidget(m_toolsFrame, 1);
     bottomLayout->addWidget(contentFrame, 4);
@@ -198,6 +281,18 @@ StoragePage::StoragePage(QWidget *parent)
         });
     connect(m_clearCacheButton, &QPushButton::clicked,
             this, &StoragePage::clearCacheRequested);
+    connect(m_alarmToggleButton, &QAbstractButton::toggled, this, [this](bool checked) {
+        m_alarmEnabled = checked;
+        if (m_alarmToggleButton != nullptr) {
+            m_alarmToggleButton->setChecked(m_alarmEnabled);
+        }
+    });
+    connect(m_autoToggleButton, &QAbstractButton::toggled, this, [this](bool checked) {
+        m_autoEnabled = checked;
+        if (m_autoToggleButton != nullptr) {
+            m_autoToggleButton->setChecked(m_autoEnabled);
+        }
+    });
 }
 
 void StoragePage::showSizes(const QString &cacheSize, const QString &appSize)

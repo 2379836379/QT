@@ -6,6 +6,7 @@ class QLabel;
 class QPushButton;
 class QFrame;
 class QWidget;
+class QAbstractButton;
 
 class StoragePage : public QWidget
 {
@@ -37,8 +38,12 @@ private:
     QPushButton *m_collapsedBackButton = nullptr;
     QLabel *m_cacheSizeValueLabel = nullptr;
     QLabel *m_appSizeValueLabel = nullptr;
+    QAbstractButton *m_alarmToggleButton = nullptr;
+    QAbstractButton *m_autoToggleButton = nullptr;
     QLabel *m_statusLabel = nullptr;
     QPushButton *m_clearCacheButton = nullptr;
     bool m_toolsExpanded = true;
     bool m_darkMode = false;
+    bool m_alarmEnabled = false;
+    bool m_autoEnabled = false;
 };

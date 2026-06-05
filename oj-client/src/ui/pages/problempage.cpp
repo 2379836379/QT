@@ -493,31 +493,79 @@ void LineNumberArea::paintEvent(QPaintEvent *event)
     }
 }
 
-QString formatProblemDetail(const ProblemPageInfo &problemPageInfo)
+QString formatProblemDetail(const ProblemPageInfo &problemPageInfo,
+                            const QString &translatedDescription = QString(),
+                            const QString &translatedInputSpec = QString(),
+                            const QString &translatedOutputSpec = QString(),
+                            const QString &translatedHint = QString(),
+                            const QString &translationStatus = QString())
 {
-    return QString(
-               "Title\n%1\n\n"
-               "Problem URL\n%2\n\n"
-               "Submit URL\n%3\n\n"
-               "Time Limit\n%4\n\n"
-               "Memory Limit\n%5\n\n"
-               "Description\n%6\n\n"
-               "Input\n%7\n\n"
-               "Output\n%8\n\n"
-               "Sample Input\n%9\n\n"
-               "Sample Output\n%10\n\n"
-               "Hint\n%11")
-        .arg(problemPageInfo.title,
-             problemPageInfo.problemUrl,
-             problemPageInfo.submitUrl,
-             problemPageInfo.timeLimit,
-             problemPageInfo.memoryLimit,
-             problemPageInfo.description,
-             problemPageInfo.inputSpec,
-             problemPageInfo.outputSpec,
-             problemPageInfo.sampleInput,
-             problemPageInfo.sampleOutput,
-             problemPageInfo.hint);
+    const QString titleColor = g_problemPageDarkMode ? "#f3f6f9" : "#1f2328";
+    const QString metaColor = g_problemPageDarkMode ? "#aebbc8" : "#526056";
+    const QString sectionTitleColor = g_problemPageDarkMode ? "#e4ebf2" : "#243029";
+    const QString bodyColor = g_problemPageDarkMode ? "#d8e0e8" : "#2f3a33";
+
+    const auto esc = [](const QString &text) {
+        QString html = text.toHtmlEscaped();
+        html.replace("\r\n", "\n");
+        html.replace('\r', '\n');
+        html.replace('\n', "<br/>");
+        return html;
+    };
+    const auto section = [&](const QString &title, const QString &body) {
+        if (body.trimmed().isEmpty()) {
+            return QString();
+        }
+        return QString(
+                   "<div style='margin-top:18px;'>"
+                   "<div style='font-size:15px;font-weight:600;color:%1;margin-bottom:8px;'>%2</div>"
+                   "<div style='font-size:14px;line-height:1.65;color:%3;'>%4</div>"
+                   "</div>")
+            .arg(sectionTitleColor, title, bodyColor, body);
+    };
+
+    QString html;
+    html += "<div style='margin-bottom:14px;white-space:nowrap;'>";
+    if (!problemPageInfo.timeLimit.trimmed().isEmpty()) {
+        html += QString(
+                    "<span style='padding:2px 0px;font-size:12px;color:%1;'>"
+                    "Time Limit: %2</span>")
+                    .arg(metaColor, problemPageInfo.timeLimit.toHtmlEscaped());
+    }
+    if (!problemPageInfo.timeLimit.trimmed().isEmpty()
+        && !problemPageInfo.memoryLimit.trimmed().isEmpty()) {
+        html += "&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;";
+    }
+    if (!problemPageInfo.memoryLimit.trimmed().isEmpty()) {
+        html += QString(
+                    "<span style='padding:2px 0px;font-size:12px;color:%1;'>"
+                    "Memory Limit: %2</span>")
+                    .arg(metaColor, problemPageInfo.memoryLimit.toHtmlEscaped());
+    }
+    html += "</div>";
+
+    if (!translationStatus.trimmed().isEmpty()) {
+        html += QString(
+                    "<div style='margin:8px 0 2px 0;font-size:12px;color:%1;'>%2</div>")
+                    .arg(metaColor, translationStatus.toHtmlEscaped());
+    }
+
+    html += section("Description",
+                    esc(translatedDescription.isEmpty() ? problemPageInfo.description
+                                                        : translatedDescription));
+    html += section("Input",
+                    esc(translatedInputSpec.isEmpty() ? problemPageInfo.inputSpec
+                                                      : translatedInputSpec));
+    html += section("Output",
+                    esc(translatedOutputSpec.isEmpty() ? problemPageInfo.outputSpec
+                                                       : translatedOutputSpec));
+    html += section("Sample Input", esc(problemPageInfo.sampleInput));
+    html += section("Sample Output", esc(problemPageInfo.sampleOutput));
+    html += section("Hint",
+                    esc(translatedHint.isEmpty() ? problemPageInfo.hint
+                                                 : translatedHint));
+
+    return html;
 }
 
 QString extractFirstMatch(const QString &text, const QString &pattern)
@@ -669,6 +717,8 @@ ProblemPage::ProblemPage(QWidget *parent)
     homeButton->setObjectName("problemRefreshButton");
     auto *themeButton = new QPushButton("Dark Mode", topFrame);
     themeButton->setObjectName("problemRefreshButton");
+    m_translateButton = new QPushButton("Translate", topFrame);
+    m_translateButton->setObjectName("problemRefreshButton");
     auto *refreshButton = new QPushButton("Refresh", topFrame);
     refreshButton->setObjectName("problemRefreshButton");
 
@@ -741,11 +791,21 @@ ProblemPage::ProblemPage(QWidget *parent)
     auto *problemLabel = new QLabel("Problem", problemFrame);
     problemLabel->setObjectName("problemSectionLabel");
 
+    auto *problemHeaderLayout = new QHBoxLayout();
+    problemHeaderLayout->setContentsMargins(0, 0, 0, 0);
+    problemHeaderLayout->setSpacing(12);
+    problemHeaderLayout->addWidget(problemLabel);
+    problemHeaderLayout->addStretch();
+    m_showOriginalButton = new QPushButton("Original", problemFrame);
+    m_showOriginalButton->setObjectName("problemRefreshButton");
+    problemHeaderLayout->addWidget(m_showOriginalButton, 0, Qt::AlignRight);
+    problemHeaderLayout->addWidget(m_translateButton, 0, Qt::AlignRight);
+
     m_detailTextEdit = new QTextEdit(problemFrame);
     m_detailTextEdit->setObjectName("problemDetailText");
     m_detailTextEdit->setReadOnly(true);
 
-    problemLayout->addWidget(problemLabel);
+    problemLayout->addLayout(problemHeaderLayout);
     problemLayout->addWidget(m_detailTextEdit, 1);
     writeStartupLog("ProblemPage: problem frame complete");
 
@@ -1067,6 +1127,13 @@ ProblemPage::ProblemPage(QWidget *parent)
     connect(themeButton, &QPushButton::clicked, this, [this]() {
         emit themeToggleRequested(!m_darkMode);
     });
+    connect(m_translateButton,
+            &QPushButton::clicked,
+            this,
+            &ProblemPage::translateProblemRequested);
+    connect(m_showOriginalButton, &QPushButton::clicked, this, [this]() {
+        showOriginalProblemText();
+    });
     connect(refreshButton, &QPushButton::clicked, this, &ProblemPage::refreshRequested);
     connect(m_backToolButton, &QPushButton::clicked, this, &ProblemPage::backRequested);
     connect(m_collapsedBackButton, &QPushButton::clicked, this, &ProblemPage::backRequested);
@@ -1229,6 +1296,16 @@ void ProblemPage::setResultTab(bool showTestTab)
 void ProblemPage::openProblem(const QString &problemTitle)
 {
     writeStartupLog("ProblemPage::openProblem begin");
+    m_hasDisplayedProblemInfo = false;
+    m_displayedProblemInfo = ProblemPageInfo{};
+    m_translatedDescription.clear();
+    m_translatedInputSpec.clear();
+    m_translatedOutputSpec.clear();
+    m_translatedHint.clear();
+    m_problemTranslationStatus.clear();
+    m_hasProblemTranslation = false;
+    m_problemTranslationLoading = false;
+    m_showingOriginalProblem = false;
     m_titleLabel->setText(problemTitle.isEmpty() ? "Problem" : problemTitle);
     writeStartupLog("ProblemPage::openProblem title set");
     m_detailTextEdit->setPlainText("Loading problem detail...");
@@ -1247,25 +1324,50 @@ void ProblemPage::openProblem(const QString &problemTitle)
     writeStartupLog("ProblemPage::openProblem favorite disabled");
     setSubmitEnabled(false);
     writeStartupLog("ProblemPage::openProblem submit disabled");
+    showProblemTranslating(false);
 }
 
 void ProblemPage::showProblemLoadedFromFavorites(const ProblemPageInfo &problemPageInfo)
 {
+    m_displayedProblemInfo = problemPageInfo;
+    m_hasDisplayedProblemInfo = true;
+    m_translatedDescription.clear();
+    m_translatedInputSpec.clear();
+    m_translatedOutputSpec.clear();
+    m_translatedHint.clear();
+    m_problemTranslationStatus.clear();
+    m_hasProblemTranslation = false;
+    m_problemTranslationLoading = false;
+    m_showingOriginalProblem = false;
     m_titleLabel->setText(
         problemPageInfo.title.isEmpty() ? QString("Problem") : problemPageInfo.title);
-    m_detailTextEdit->setPlainText(formatProblemDetail(problemPageInfo));
+    refreshProblemDetailView();
+    showProblemTranslating(false);
 }
 
 void ProblemPage::showProblem(const ProblemPageInfo &problemPageInfo)
 {
+    m_displayedProblemInfo = problemPageInfo;
+    m_hasDisplayedProblemInfo = true;
+    m_translatedDescription.clear();
+    m_translatedInputSpec.clear();
+    m_translatedOutputSpec.clear();
+    m_translatedHint.clear();
+    m_problemTranslationStatus.clear();
+    m_hasProblemTranslation = false;
+    m_problemTranslationLoading = false;
+    m_showingOriginalProblem = false;
     m_titleLabel->setText(
         problemPageInfo.title.isEmpty() ? QString("Problem") : problemPageInfo.title);
-    m_detailTextEdit->setPlainText(formatProblemDetail(problemPageInfo));
+    refreshProblemDetailView();
+    showProblemTranslating(false);
 }
 
 void ProblemPage::showProblemLoadFailed(const QString &message)
 {
+    m_hasDisplayedProblemInfo = false;
     m_detailTextEdit->setPlainText(message);
+    showProblemTranslating(false);
 }
 
 void ProblemPage::openSubmit(const ProblemPageInfo &problemPageInfo)
@@ -1446,6 +1548,107 @@ void ProblemPage::showAiFailed(const QString &message)
     refreshAiResponseView();
 }
 
+void ProblemPage::showOriginalProblemText()
+{
+    m_showingOriginalProblem = true;
+    m_problemTranslationStatus = "Showing original text.";
+    refreshProblemDetailView();
+    showProblemTranslating(false);
+}
+
+void ProblemPage::applyCachedProblemTranslation(const QString &description,
+                                                const QString &inputSpec,
+                                                const QString &outputSpec,
+                                                const QString &hint)
+{
+    m_translatedDescription = description;
+    m_translatedInputSpec = inputSpec;
+    m_translatedOutputSpec = outputSpec;
+    m_translatedHint = hint;
+    m_hasProblemTranslation = !description.trimmed().isEmpty()
+                              || !inputSpec.trimmed().isEmpty()
+                              || !outputSpec.trimmed().isEmpty()
+                              || !hint.trimmed().isEmpty();
+    m_showingOriginalProblem = false;
+    m_problemTranslationStatus =
+        m_hasProblemTranslation ? "Showing cached translation." : QString();
+    refreshProblemDetailView();
+    showProblemTranslating(false);
+}
+
+bool ProblemPage::hasCachedProblemTranslation() const
+{
+    return m_hasProblemTranslation;
+}
+
+void ProblemPage::showCachedProblemTranslation()
+{
+    if (!m_hasProblemTranslation) {
+        return;
+    }
+    m_showingOriginalProblem = false;
+    m_problemTranslationStatus = "Showing cached translation.";
+    refreshProblemDetailView();
+    showProblemTranslating(false);
+}
+
+void ProblemPage::showProblemTranslating(bool translating)
+{
+    m_problemTranslationLoading = translating;
+    if (translating) {
+        m_problemTranslationStatus = "Translating description, input, output, and hint...";
+    }
+    if (m_translateButton == nullptr) {
+        refreshProblemDetailView();
+        return;
+    }
+
+    const bool canTranslate =
+        m_hasDisplayedProblemInfo
+        && (!m_displayedProblemInfo.description.trimmed().isEmpty()
+            || !m_displayedProblemInfo.hint.trimmed().isEmpty());
+    if (m_showOriginalButton != nullptr) {
+        m_showOriginalButton->setEnabled(m_hasProblemTranslation && !translating);
+    }
+    m_translateButton->setEnabled(canTranslate && !translating);
+    if (translating) {
+        m_translateButton->setText("Translating...");
+    } else if (m_hasProblemTranslation) {
+        m_translateButton->setText("Translated");
+    } else {
+        m_translateButton->setText("Translate");
+    }
+    refreshProblemDetailView();
+}
+
+void ProblemPage::applyProblemTranslation(const QString &description,
+                                          const QString &inputSpec,
+                                          const QString &outputSpec,
+                                          const QString &hint)
+{
+    m_translatedDescription = description;
+    m_translatedInputSpec = inputSpec;
+    m_translatedOutputSpec = outputSpec;
+    m_translatedHint = hint;
+    m_problemTranslationStatus = "Translation applied.";
+    m_hasProblemTranslation = !description.trimmed().isEmpty()
+                              || !inputSpec.trimmed().isEmpty()
+                              || !outputSpec.trimmed().isEmpty()
+                              || !hint.trimmed().isEmpty();
+    m_problemTranslationLoading = false;
+    m_showingOriginalProblem = false;
+    showProblemTranslating(false);
+    refreshProblemDetailView();
+}
+
+void ProblemPage::showProblemTranslationFailed(const QString &message)
+{
+    m_problemTranslationLoading = false;
+    m_problemTranslationStatus = "Translation failed: " + message;
+    showProblemTranslating(false);
+    refreshProblemDetailView();
+}
+
 void ProblemPage::setSourceCodeText(const QString &text)
 {
     if (m_codeEdit != nullptr) {
@@ -1500,6 +1703,31 @@ QString ProblemPage::currentTestInput() const
 QString ProblemPage::currentTestOutput() const
 {
     return m_testResultTextEdit == nullptr ? QString() : m_testResultTextEdit->toPlainText();
+}
+
+QString ProblemPage::currentProblemDescription() const
+{
+    return m_displayedProblemInfo.description;
+}
+
+QString ProblemPage::currentProblemInputSpec() const
+{
+    return m_displayedProblemInfo.inputSpec;
+}
+
+QString ProblemPage::currentProblemOutputSpec() const
+{
+    return m_displayedProblemInfo.outputSpec;
+}
+
+QString ProblemPage::currentProblemHint() const
+{
+    return m_displayedProblemInfo.hint;
+}
+
+bool ProblemPage::isProblemTranslating() const
+{
+    return m_problemTranslationLoading;
 }
 
 void ProblemPage::setFavoriteEnabled(bool enabled)
@@ -1599,6 +1827,25 @@ void ProblemPage::refreshAiResponseView()
     }
 }
 
+void ProblemPage::refreshProblemDetailView()
+{
+    if (!m_hasDisplayedProblemInfo || m_detailTextEdit == nullptr) {
+        return;
+    }
+
+    m_detailTextEdit->setHtml(formatProblemDetail(
+        m_displayedProblemInfo,
+        m_hasProblemTranslation && !m_showingOriginalProblem ? m_translatedDescription
+                                                             : QString(),
+        m_hasProblemTranslation && !m_showingOriginalProblem ? m_translatedInputSpec
+                                                             : QString(),
+        m_hasProblemTranslation && !m_showingOriginalProblem ? m_translatedOutputSpec
+                                                             : QString(),
+        m_hasProblemTranslation && !m_showingOriginalProblem ? m_translatedHint
+                                                             : QString(),
+        m_problemTranslationStatus));
+}
+
 void ProblemPage::setDarkMode(bool dark)
 {
     m_darkMode = dark;
@@ -1684,4 +1931,6 @@ void ProblemPage::setDarkMode(bool dark)
         m_codeEdit->viewport()->update();
         m_codeEdit->update();
     }
+    refreshProblemDetailView();
+    showProblemTranslating(m_problemTranslationLoading);
 }

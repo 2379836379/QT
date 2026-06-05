@@ -50,6 +50,19 @@ public:
     void appendAiResponse(const QString &delta);
     void showAiResponse(const QString &text);
     void showAiFailed(const QString &message);
+    void showOriginalProblemText();
+    void applyCachedProblemTranslation(const QString &description,
+                                       const QString &inputSpec,
+                                       const QString &outputSpec,
+                                       const QString &hint);
+    bool hasCachedProblemTranslation() const;
+    void showCachedProblemTranslation();
+    void showProblemTranslating(bool translating);
+    void applyProblemTranslation(const QString &description,
+                                 const QString &inputSpec,
+                                 const QString &outputSpec,
+                                 const QString &hint);
+    void showProblemTranslationFailed(const QString &message);
     void setSourceCodeText(const QString &text);
     void setTestInputText(const QString &text);
     void appendResultPageInfo(const ResultPageInfo &resultPageInfo);
@@ -60,6 +73,11 @@ public:
     QString currentSourceCode() const;
     QString currentTestInput() const;
     QString currentTestOutput() const;
+    QString currentProblemDescription() const;
+    QString currentProblemInputSpec() const;
+    QString currentProblemOutputSpec() const;
+    QString currentProblemHint() const;
+    bool isProblemTranslating() const;
     void setFavoriteEnabled(bool enabled);
     void setSubmitEnabled(bool enabled);
 
@@ -68,6 +86,7 @@ signals:
     void homeRequested();
     void themeToggleRequested(bool dark);
     void refreshRequested();
+    void translateProblemRequested();
     void favoriteRequested();
     void aiAskRequested(const QString &question);
     void testRequested(const QString &languageLabel,
@@ -83,6 +102,7 @@ private:
     void updateCodeHighlightLanguage();
     void appendAiTranscriptBlock(const QString &title, const QString &body);
     void refreshAiResponseView();
+    void refreshProblemDetailView();
 
     QLabel *m_titleLabel = nullptr;
     QFrame *m_toolsFrame = nullptr;
@@ -100,6 +120,8 @@ private:
     QLabel *m_aiConfigLabel = nullptr;
     QPlainTextEdit *m_aiPromptEdit = nullptr;
     QPushButton *m_aiAskButton = nullptr;
+    QPushButton *m_showOriginalButton = nullptr;
+    QPushButton *m_translateButton = nullptr;
     QTextEdit *m_aiResponseTextEdit = nullptr;
     QSyntaxHighlighter *m_codeHighlighter = nullptr;
     QComboBox *m_languageComboBox = nullptr;
@@ -123,4 +145,14 @@ private:
     QString m_aiTranscript;
     QString m_aiResponseBuffer;
     bool m_darkMode = false;
+    ProblemPageInfo m_displayedProblemInfo;
+    bool m_hasDisplayedProblemInfo = false;
+    QString m_translatedDescription;
+    QString m_translatedInputSpec;
+    QString m_translatedOutputSpec;
+    QString m_translatedHint;
+    QString m_problemTranslationStatus;
+    bool m_hasProblemTranslation = false;
+    bool m_problemTranslationLoading = false;
+    bool m_showingOriginalProblem = false;
 };

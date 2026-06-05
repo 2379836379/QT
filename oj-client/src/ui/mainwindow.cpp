@@ -996,6 +996,46 @@ void MainWindow::connectSignals()
         this,
         [this](const QString &message) {
             m_problemPage->showAiFailed(message);
+            if (m_problemPage->isProblemTranslating()) {
+                m_problemPage->showProblemTranslationFailed(message);
+            }
+        });
+    connect(
+        m_aiService,
+        &AiService::problemTranslationReady,
+        this,
+        [this](const QString &description,
+               const QString &inputSpec,
+               const QString &outputSpec,
+               const QString &hint) {
+            if (m_hasCurrentProblem && !m_currentProblemInfo.problemUrl.isEmpty()) {
+                ProblemTranslationInfo translationInfo;
+                translationInfo.description = description;
+                translationInfo.inputSpec = inputSpec;
+                translationInfo.outputSpec = outputSpec;
+                translationInfo.hint = hint;
+                m_favoriteProblemRepository->saveProblemTranslation(
+                    m_currentProblemInfo.problemUrl, translationInfo);
+            }
+            m_problemPage->applyProblemTranslation(description,
+                                                   inputSpec,
+                                                   outputSpec,
+                                                   hint);
+        });
+    connect(
+        m_problemPage,
+        &ProblemPage::translateProblemRequested,
+        this,
+        [this]() {
+            if (m_problemPage->hasCachedProblemTranslation()) {
+                m_problemPage->showCachedProblemTranslation();
+                return;
+            }
+            m_problemPage->showProblemTranslating(true);
+            m_aiService->translateProblem(m_problemPage->currentProblemDescription(),
+                                          m_problemPage->currentProblemInputSpec(),
+                                          m_problemPage->currentProblemOutputSpec(),
+                                          m_problemPage->currentProblemHint());
         });
     connect(
         m_client,
@@ -1029,6 +1069,14 @@ void MainWindow::connectSignals()
         [this](const ProblemPageInfo &problemPageInfo) {
             setCurrentProblem(problemPageInfo);
             m_problemPage->showProblemLoadedFromFavorites(problemPageInfo);
+            ProblemTranslationInfo translationInfo;
+            if (m_favoriteProblemRepository->loadProblemTranslation(
+                    problemPageInfo.problemUrl, &translationInfo)) {
+                m_problemPage->applyCachedProblemTranslation(translationInfo.description,
+                                                             translationInfo.inputSpec,
+                                                             translationInfo.outputSpec,
+                                                             translationInfo.hint);
+            }
             if (!problemPageInfo.submitUrl.isEmpty()) {
                 m_problemPage->openSubmit(problemPageInfo);
                 m_submitService->openSubmit(QUrl(problemPageInfo.submitUrl));
@@ -1264,6 +1312,14 @@ void MainWindow::connectSignals()
             setCurrentProblem(problemPageInfo);
             writeStartupLog("MainWindow: current problem set");
             m_problemPage->showProblem(problemPageInfo);
+            ProblemTranslationInfo translationInfo;
+            if (m_favoriteProblemRepository->loadProblemTranslation(
+                    problemPageInfo.problemUrl, &translationInfo)) {
+                m_problemPage->applyCachedProblemTranslation(translationInfo.description,
+                                                             translationInfo.inputSpec,
+                                                             translationInfo.outputSpec,
+                                                             translationInfo.hint);
+            }
             writeStartupLog("MainWindow: problem page content shown");
             if (!problemPageInfo.submitUrl.isEmpty()) {
                 writeStartupLog("MainWindow: openSubmit begin");

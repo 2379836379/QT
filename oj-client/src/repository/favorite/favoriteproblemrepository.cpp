@@ -100,6 +100,20 @@ bool FavoriteProblemRepository::initialize()
         return false;
     }
 
+    ok = query.exec(
+        "CREATE TABLE IF NOT EXISTS problem_translations ("
+        "problem_url TEXT PRIMARY KEY,"
+        "description TEXT,"
+        "input_spec TEXT,"
+        "output_spec TEXT,"
+        "hint TEXT,"
+        "updated_at TEXT DEFAULT CURRENT_TIMESTAMP"
+        ")");
+    if (!ok) {
+        m_lastError = query.lastError().text();
+        return false;
+    }
+
     return true;
 }
 
@@ -319,6 +333,64 @@ bool FavoriteProblemRepository::loadFavorite(
 
     if (problemPageInfo != nullptr) {
         *problemPageInfo = readProblem(query);
+    }
+    return true;
+}
+
+bool FavoriteProblemRepository::saveProblemTranslation(
+    const QString &problemUrl, const ProblemTranslationInfo &translationInfo)
+{
+    if (!openDatabase()) {
+        return false;
+    }
+
+    QSqlQuery query(QSqlDatabase::database(m_connectionName));
+    query.prepare(
+        "INSERT INTO problem_translations ("
+        "problem_url, description, input_spec, output_spec, hint, updated_at"
+        ") VALUES ("
+        ":problem_url, :description, :input_spec, :output_spec, :hint, CURRENT_TIMESTAMP"
+        ") "
+        "ON CONFLICT(problem_url) DO UPDATE SET "
+        "description = excluded.description, "
+        "input_spec = excluded.input_spec, "
+        "output_spec = excluded.output_spec, "
+        "hint = excluded.hint, "
+        "updated_at = CURRENT_TIMESTAMP");
+    query.bindValue(":problem_url", problemUrl);
+    query.bindValue(":description", translationInfo.description);
+    query.bindValue(":input_spec", translationInfo.inputSpec);
+    query.bindValue(":output_spec", translationInfo.outputSpec);
+    query.bindValue(":hint", translationInfo.hint);
+
+    const bool ok = query.exec();
+    if (!ok) {
+        m_lastError = query.lastError().text();
+    }
+    return ok;
+}
+
+bool FavoriteProblemRepository::loadProblemTranslation(
+    const QString &problemUrl, ProblemTranslationInfo *translationInfo) const
+{
+    if (!QSqlDatabase::contains(m_connectionName)) {
+        return false;
+    }
+
+    QSqlQuery query(QSqlDatabase::database(m_connectionName));
+    query.prepare(
+        "SELECT description, input_spec, output_spec, hint "
+        "FROM problem_translations WHERE problem_url = :problem_url");
+    query.bindValue(":problem_url", problemUrl);
+    if (!query.exec() || !query.next()) {
+        return false;
+    }
+
+    if (translationInfo != nullptr) {
+        translationInfo->description = query.value(0).toString();
+        translationInfo->inputSpec = query.value(1).toString();
+        translationInfo->outputSpec = query.value(2).toString();
+        translationInfo->hint = query.value(3).toString();
     }
     return true;
 }

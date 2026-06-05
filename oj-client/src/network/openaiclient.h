@@ -14,6 +14,8 @@ public:
 
     void setBaseUrl(const QUrl &baseUrl);
     void createResponseStream(const QString &apiKey, const QJsonObject &payload);
+    void createResponse(const QString &apiKey, const QJsonObject &payload);
+    void createChatCompletion(const QString &apiKey, const QJsonObject &payload);
 
 signals:
     void responseDelta(const QString &delta);

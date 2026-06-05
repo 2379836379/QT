@@ -6,6 +6,7 @@
 #include <QListWidget>
 #include <QListWidgetItem>
 #include <QPushButton>
+#include <QSizePolicy>
 #include <QVBoxLayout>
 
 ContestPage::ContestPage(QWidget *parent)
@@ -178,6 +179,13 @@ ContestPage::ContestPage(QWidget *parent)
         "#contestProblemList::item:hover {"
         "  background: #eef4ef;"
         "}"
+        "#contestProblemTitleLabel {"
+        "  color: #1f2328;"
+        "}"
+        "#contestProblemStatusLabel {"
+        "  color: #5e675f;"
+        "  font-weight: 600;"
+        "}"
     );
 
     setToolsExpanded(true);
@@ -255,6 +263,28 @@ void ContestPage::showProblems(const ContestPageInfo &contestPageInfo)
         const QString text = QString("%1 %2").arg(problem.problemId, problem.title);
         auto *item = new QListWidgetItem(text, m_problemListWidget);
         item->setData(Qt::UserRole, problem.problemUrl);
+
+        auto *rowWidget = new QWidget(m_problemListWidget);
+        auto *rowLayout = new QHBoxLayout(rowWidget);
+        rowLayout->setContentsMargins(0, 0, 0, 0);
+        rowLayout->setSpacing(12);
+
+        auto *titleLabel = new QLabel(text, rowWidget);
+        titleLabel->setObjectName("contestProblemTitleLabel");
+        titleLabel->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
+
+        rowLayout->addWidget(titleLabel, 1);
+        rowLayout->addStretch();
+
+        if (problem.solved) {
+            auto *statusLabel = new QLabel("finished", rowWidget);
+            statusLabel->setObjectName("contestProblemStatusLabel");
+            statusLabel->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+            rowLayout->addWidget(statusLabel, 0, Qt::AlignRight);
+        }
+
+        item->setSizeHint(rowWidget->sizeHint());
+        m_problemListWidget->setItemWidget(item, rowWidget);
     }
 }
 
@@ -291,6 +321,11 @@ void ContestPage::setDarkMode(bool dark)
         "}"
         "#contestProblemList::item:hover {"
         "  background: #26313c;"
+        "}"
+        "#contestProblemTitleLabel { color: #e8edf2; }"
+        "#contestProblemStatusLabel {"
+        "  color: #9fc4a7;"
+        "  font-weight: 600;"
         "}";
 
     setStyleSheet(dark ? lightStyle + darkOverride : lightStyle);

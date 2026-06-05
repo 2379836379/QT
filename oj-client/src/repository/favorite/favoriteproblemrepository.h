@@ -6,6 +6,14 @@
 #include <QList>
 #include <QString>
 
+struct ProblemTranslationInfo
+{
+    QString description;
+    QString inputSpec;
+    QString outputSpec;
+    QString hint;
+};
+
 class FavoriteProblemRepository
 {
 public:
@@ -20,6 +28,10 @@ public:
     bool saveFavoriteToFolder(const ProblemPageInfo &problemPageInfo, qint64 folderId);
     bool removeFavoriteFromFolder(const QString &problemUrl, qint64 folderId);
     bool loadFavorite(const QString &problemUrl, ProblemPageInfo *problemPageInfo) const;
+    bool saveProblemTranslation(const QString &problemUrl,
+                                const ProblemTranslationInfo &translationInfo);
+    bool loadProblemTranslation(const QString &problemUrl,
+                                ProblemTranslationInfo *translationInfo) const;
     QString lastError() const;
 
 private:

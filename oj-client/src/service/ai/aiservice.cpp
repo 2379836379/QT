@@ -5,6 +5,7 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QRegularExpression>
 #include <QStringList>
 
 namespace
@@ -17,6 +18,13 @@ QString defaultSystemPrompt()
            "When the user asks to test, run, validate, or check the program, prefer calling run_test. "
            "Use the current test input unless the user explicitly asks to change it. "
            "You may call tools to inspect or modify the workspace.";
+}
+
+QString translationSystemPrompt()
+{
+    return "Translate only the problem description, input, output, and hint into concise Chinese. "
+           "Preserve line breaks. Do not translate code, variable names, URLs, or sample IO. "
+           "Return strict JSON with keys description, input, output, and hint.";
 }
 
 QJsonObject textContentItem(const QString &text)
@@ -114,6 +122,47 @@ void AiService::ask(const QString &question,
     m_debugLog.clear();
     m_pendingToolCallId.clear();
     m_pendingToolName.clear();
+    m_translationMode = false;
+    m_thinking = true;
+    emit thinkingChanged(true);
+    sendRequest();
+}
+
+void AiService::translateProblem(const QString &description,
+                                 const QString &inputSpec,
+                                 const QString &outputSpec,
+                                 const QString &hint)
+{
+    if (m_client == nullptr) {
+        emit failed("AI client is not available.");
+        return;
+    }
+    if (m_config.apiKey.trimmed().isEmpty()) {
+        emit failed("API key is required.");
+        return;
+    }
+    if (description.trimmed().isEmpty() && inputSpec.trimmed().isEmpty()
+        && outputSpec.trimmed().isEmpty() && hint.trimmed().isEmpty()) {
+        emit failed("Nothing to translate.");
+        return;
+    }
+
+    m_question.clear();
+    m_problemDetail.clear();
+    m_sourceCode.clear();
+    m_testInput.clear();
+    m_testOutput.clear();
+    m_systemPrompt = translationSystemPrompt();
+    m_inputItems = QJsonArray{makeMessageItem(
+        "user",
+        buildProblemTranslationPrompt(description, inputSpec, outputSpec, hint))};
+    m_accumulatedResponse.clear();
+    m_currentResponseText.clear();
+    m_debugLog.clear();
+    m_pendingToolCallId.clear();
+    m_pendingToolName.clear();
+    m_translationMode = true;
+    m_translationChatFallbackTried = false;
     m_thinking = true;
     emit thinkingChanged(true);
     sendRequest();
@@ -184,6 +233,23 @@ QString AiService::buildUserPrompt(const QString &question,
              testOutput.isEmpty() ? "<none>" : testOutput);
 }
 
+QString AiService::buildProblemTranslationPrompt(const QString &description,
+                                                 const QString &inputSpec,
+                                                 const QString &outputSpec,
+                                                 const QString &hint) const
+{
+    return QString(
+               "Description\n%1\n\n"
+               "Input\n%2\n\n"
+               "Output\n%3\n\n"
+               "Hint\n%4\n\n"
+               "Return JSON only.")
+        .arg(description.trimmed().isEmpty() ? "<none>" : description,
+             inputSpec.trimmed().isEmpty() ? "<none>" : inputSpec,
+             outputSpec.trimmed().isEmpty() ? "<none>" : outputSpec,
+             hint.trimmed().isEmpty() ? "<none>" : hint);
+}
+
 QString AiService::buildToolResultPrompt(const QString &toolName,
                                          const QString &toolOutput,
                                          const QString &problemDetail,
@@ -221,12 +287,16 @@ QJsonObject AiService::buildRequestPayload(const QString &question,
     Q_UNUSED(testInput);
     Q_UNUSED(testOutput);
 
-    return QJsonObject{
+    QJsonObject payload{
         {"model", m_config.model},
         {"instructions", m_systemPrompt},
-        {"tools", buildTools()},
         {"input", m_inputItems},
     };
+
+    if (!m_translationMode) {
+        payload.insert("tools", buildTools());
+    }
+    return payload;
 }
 
 QJsonArray AiService::buildTools() const
@@ -299,27 +369,155 @@ void AiService::sendRequest()
                                                         m_sourceCode,
                                                         m_testInput,
                                                         m_testOutput);
-        const QJsonObject debugPayload = QJsonObject(payload);
-        const QString requestText =
-            QString("OpenAI Request\n"
-                    "POST %1\n\n"
-                    "Payload:\n%2")
-                .arg(m_config.baseUrl.toString().endsWith('/')
-                         ? m_config.baseUrl.toString() + "responses"
-                         : m_config.baseUrl.toString() + "/responses",
-                     QString::fromUtf8(
-                         QJsonDocument(debugPayload).toJson(QJsonDocument::Indented)));
+        QString requestText;
         if (!m_debugLog.isEmpty()) {
             m_debugLog += "\n\n";
         }
-        m_debugLog += requestText;
-        m_client->createResponseStream(m_config.apiKey.trimmed(), payload);
+        if (m_translationMode) {
+            QJsonArray messages;
+            messages.append(QJsonObject{
+                {"role", "system"},
+                {"content", m_systemPrompt},
+            });
+            if (!m_inputItems.isEmpty()) {
+                const QJsonObject item = m_inputItems.first().toObject();
+                const QJsonArray contentArray = item.value("content").toArray();
+                QString userText;
+                for (const QJsonValue &contentValue : contentArray) {
+                    const QJsonObject contentObject = contentValue.toObject();
+                    if (contentObject.value("type").toString() == "input_text") {
+                        userText += contentObject.value("text").toString();
+                    }
+                }
+                messages.append(QJsonObject{
+                    {"role", "user"},
+                    {"content", userText},
+                });
+            }
+
+            QJsonObject chatPayload{
+                {"model", m_config.model},
+                {"messages", messages},
+                {"stream", false},
+            };
+            requestText =
+                QString("OpenAI Request\n"
+                        "POST %1\n\n"
+                        "Payload:\n%2")
+                    .arg(m_config.baseUrl.toString().endsWith('/')
+                             ? m_config.baseUrl.toString() + "chat/completions"
+                             : m_config.baseUrl.toString() + "/chat/completions",
+                         QString::fromUtf8(
+                             QJsonDocument(chatPayload).toJson(QJsonDocument::Indented)));
+            m_debugLog += requestText;
+            m_translationChatFallbackTried = true;
+            m_client->createChatCompletion(m_config.apiKey.trimmed(), chatPayload);
+        } else {
+            const QJsonObject debugPayload = QJsonObject(payload);
+            requestText =
+                QString("OpenAI Request\n"
+                        "POST %1\n\n"
+                        "Payload:\n%2")
+                    .arg(m_config.baseUrl.toString().endsWith('/')
+                             ? m_config.baseUrl.toString() + "responses"
+                             : m_config.baseUrl.toString() + "/responses",
+                         QString::fromUtf8(
+                             QJsonDocument(debugPayload).toJson(QJsonDocument::Indented)));
+            m_debugLog += requestText;
+            m_client->createResponseStream(m_config.apiKey.trimmed(), payload);
+        }
     }
+}
+
+void AiService::sendChatCompletionFallback()
+{
+    if (m_client == nullptr) {
+        emit failed("AI client is not available.");
+        return;
+    }
+
+    QJsonArray messages;
+    messages.append(QJsonObject{
+        {"role", "system"},
+        {"content", m_systemPrompt},
+    });
+    if (!m_inputItems.isEmpty()) {
+        const QJsonObject item = m_inputItems.first().toObject();
+        const QJsonArray contentArray = item.value("content").toArray();
+        QString userText;
+        for (const QJsonValue &contentValue : contentArray) {
+            const QJsonObject contentObject = contentValue.toObject();
+            if (contentObject.value("type").toString() == "input_text") {
+                userText += contentObject.value("text").toString();
+            }
+        }
+        messages.append(QJsonObject{
+            {"role", "user"},
+            {"content", userText},
+        });
+    }
+
+    QJsonObject payload{
+        {"model", m_config.model},
+        {"messages", messages},
+        {"stream", false},
+    };
+
+    const QString requestText =
+        QString("OpenAI Request\n"
+                "POST %1\n\n"
+                "Payload:\n%2")
+            .arg(m_config.baseUrl.toString().endsWith('/')
+                     ? m_config.baseUrl.toString() + "chat/completions"
+                     : m_config.baseUrl.toString() + "/chat/completions",
+                 QString::fromUtf8(
+                     QJsonDocument(payload).toJson(QJsonDocument::Indented)));
+    if (!m_debugLog.isEmpty()) {
+        m_debugLog += "\n\n";
+    }
+    m_debugLog += requestText;
+    m_client->createChatCompletion(m_config.apiKey.trimmed(), payload);
 }
 
 void AiService::handleCompletedResponse(const QJsonObject &response)
 {
-    const QJsonObject responseObject = unwrapResponseObject(response);
+    QJsonObject responseObject = unwrapResponseObject(response);
+    if (m_translationMode) {
+        m_thinking = false;
+        emit thinkingChanged(false);
+        QString finalText;
+        const bool isResponsesObject =
+            responseObject.value("object").toString() == "response";
+        const QJsonArray outputArray = responseObject.value("output").toArray();
+        if (!isResponsesObject || !outputArray.isEmpty()) {
+            finalText = extractResponseText(responseObject).trimmed();
+        }
+        if (finalText.isEmpty()) {
+            finalText = m_accumulatedResponse.trimmed();
+        }
+        if (finalText.isEmpty() && !m_translationChatFallbackTried) {
+            m_translationChatFallbackTried = true;
+            m_thinking = true;
+            emit thinkingChanged(true);
+            sendChatCompletionFallback();
+            return;
+        }
+        const QJsonObject object = parseTranslationObject(finalText);
+        const QString description = object.value("description").toString();
+        const QString inputSpec = object.value("input").toString();
+        const QString outputSpec = object.value("output").toString();
+        const QString hint = object.value("hint").toString();
+        if (object.isEmpty()
+            || (description.trimmed().isEmpty() && inputSpec.trimmed().isEmpty()
+                && outputSpec.trimmed().isEmpty() && hint.trimmed().isEmpty())) {
+            emit failed(QString("Translation parse failed.\n\n%1").arg(finalText));
+            return;
+        }
+        m_translationMode = false;
+        emit problemTranslationReady(description, inputSpec, outputSpec, hint);
+        return;
+    }
+
     const QJsonArray outputArray = responseObject.value("output").toArray();
     bool hasToolCall = false;
     for (const QJsonValue &itemValue : outputArray) {
@@ -339,6 +537,7 @@ void AiService::handleCompletedResponse(const QJsonObject &response)
         if (!finalText.isEmpty() && finalText != m_accumulatedResponse) {
             m_accumulatedResponse = finalText;
         }
+        m_translationMode = false;
         emit responseReady(m_accumulatedResponse.isEmpty() ? finalText : m_accumulatedResponse);
         return;
     }
@@ -510,6 +709,18 @@ void AiService::processToolCall(const QJsonObject &callObject)
 
 QString AiService::extractResponseText(const QJsonObject &response) const
 {
+    if (response.contains("choices")) {
+        const QJsonArray choices = response.value("choices").toArray();
+        if (!choices.isEmpty()) {
+            const QJsonObject message =
+                choices.first().toObject().value("message").toObject();
+            const QString content = message.value("content").toString();
+            if (!content.isEmpty()) {
+                return content;
+            }
+        }
+    }
+
     const QString outputText = response.value("output_text").toString();
     if (!outputText.isEmpty()) {
         return outputText;
@@ -540,4 +751,40 @@ QJsonObject AiService::parseArguments(const QString &argumentsText) const
 {
     const QJsonDocument document = QJsonDocument::fromJson(argumentsText.toUtf8());
     return document.isObject() ? document.object() : QJsonObject();
+}
+
+QJsonObject AiService::parseTranslationObject(const QString &text) const
+{
+    const auto tryParseObject = [](const QString &candidate) {
+        const QJsonDocument document =
+            QJsonDocument::fromJson(candidate.trimmed().toUtf8());
+        return document.isObject() ? document.object() : QJsonObject();
+    };
+
+    QJsonObject object = tryParseObject(text);
+    if (!object.isEmpty()) {
+        return object;
+    }
+
+    QRegularExpression fencedJson(
+        QStringLiteral("```(?:json)?\\s*([\\s\\S]*?)\\s*```"),
+        QRegularExpression::CaseInsensitiveOption);
+    const QRegularExpressionMatch fencedMatch = fencedJson.match(text);
+    if (fencedMatch.hasMatch()) {
+        object = tryParseObject(fencedMatch.captured(1));
+        if (!object.isEmpty()) {
+            return object;
+        }
+    }
+
+    const int firstBrace = text.indexOf('{');
+    const int lastBrace = text.lastIndexOf('}');
+    if (firstBrace >= 0 && lastBrace > firstBrace) {
+        object = tryParseObject(text.mid(firstBrace, lastBrace - firstBrace + 1));
+        if (!object.isEmpty()) {
+            return object;
+        }
+    }
+
+    return QJsonObject();
 }

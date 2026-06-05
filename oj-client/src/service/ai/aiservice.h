@@ -37,6 +37,10 @@ public:
              const QString &sourceCode = QString(),
              const QString &testInput = QString(),
              const QString &testOutput = QString());
+    void translateProblem(const QString &description,
+                          const QString &inputSpec,
+                          const QString &outputSpec,
+                          const QString &hint);
     void completeToolCall(const QString &callId, const QString &outputText);
     void failToolCall(const QString &callId, const QString &message);
 
@@ -45,6 +49,10 @@ signals:
     void responseDelta(const QString &text);
     void responseReady(const QString &text);
     void failed(const QString &message);
+    void problemTranslationReady(const QString &description,
+                                 const QString &inputSpec,
+                                 const QString &outputSpec,
+                                 const QString &hint);
     void toolCallRequested(const QString &toolName,
                            const QString &callId,
                            const QJsonObject &arguments);
@@ -55,6 +63,10 @@ private:
                             const QString &sourceCode,
                             const QString &testInput,
                             const QString &testOutput) const;
+    QString buildProblemTranslationPrompt(const QString &description,
+                                          const QString &inputSpec,
+                                          const QString &outputSpec,
+                                          const QString &hint) const;
     QString buildToolResultPrompt(const QString &toolName,
                                   const QString &toolOutput,
                                   const QString &problemDetail,
@@ -69,11 +81,13 @@ private:
     QJsonArray buildTools() const;
     QJsonObject makeMessageItem(const QString &role, const QString &text) const;
     void sendRequest();
+    void sendChatCompletionFallback();
     void handleCompletedResponse(const QJsonObject &response);
     void processToolCall(const QJsonObject &callObject);
     QJsonObject makeToolOutputItem(const QString &callId, const QString &outputText) const;
     QString extractResponseText(const QJsonObject &response) const;
     QJsonObject parseArguments(const QString &argumentsText) const;
+    QJsonObject parseTranslationObject(const QString &text) const;
 
 private:
     OpenAiClient *m_client = nullptr;
@@ -92,4 +106,6 @@ private:
     QString m_pendingToolCallId;
     QString m_pendingToolName;
     bool m_thinking = false;
+    bool m_translationMode = false;
+    bool m_translationChatFallbackTried = false;
 };
