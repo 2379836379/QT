@@ -29,6 +29,7 @@
 #include "service/login/loginservice.h"
 #include "service/login/emailverifyservice.h"
 #include "service/login/logincacheservice.h"
+#include "service/reminder/deadlinealarmservice.h"
 #include "service/reminder/reminderservice.h"
 #include "service/submit/resultservice.h"
 #include "service/submit/submitservice.h"
@@ -42,17 +43,22 @@
 #include "ui/pages/storagepage.h"
 
 #include <QAction>
+#include <QAudioOutput>
 #include <QApplication>
 #include <QDir>
+#include <QFileDialog>
 #include <QInputDialog>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonValue>
 #include <QMenu>
+#include <QMediaPlayer>
 #include <QFile>
+#include <QFileInfo>
 #include <QTextStream>
 #include <QTimer>
+#include <QUrl>
 #include <QStyle>
 #include <QSystemTrayIcon>
 #include <QWidget>
@@ -352,6 +358,8 @@ MainWindow::MainWindow(QWidget *parent)
                                      ? QString("defaults")
                                      : openAiConfig.sourcePath,
                                  openAiConfig.model);
+    m_alarmEnabled = AppConfig::loadAlarmEnabled(false);
+    m_alarmRingPath = AppConfig::loadRingPath();
     m_homeService = new HomeService(m_homeRepository, m_homeCacheRepository, this);
     m_classService = new ClassService(
         m_classRepository, m_classCacheRepository, this);
@@ -368,6 +376,14 @@ MainWindow::MainWindow(QWidget *parent)
         m_reminderClassRepository,
         m_classCacheRepository,
         this);
+    m_deadlineAlarmService = new DeadlineAlarmService(this);
+    m_deadlineAlarmService->setEnabled(m_alarmEnabled);
+    m_alarmAudioOutput = new QAudioOutput(this);
+    m_alarmAudioOutput->setVolume(1.0f);
+    m_alarmPlayer = new QMediaPlayer(this);
+    m_alarmPlayer->setAudioOutput(m_alarmAudioOutput);
+    m_alarmCheckTimer = new QTimer(this);
+    m_alarmCheckTimer->setSingleShot(true);
     writeStartupLog("MainWindow: domain services created");
 
     setupUiState();
@@ -376,6 +392,11 @@ MainWindow::MainWindow(QWidget *parent)
     writeStartupLog("MainWindow: setupTrayIcon complete");
     connectSignals();
     writeStartupLog("MainWindow: connectSignals complete");
+    connect(m_alarmCheckTimer, &QTimer::timeout, this, [this]() {
+        runHourlyAlarmCheck();
+        scheduleNextAlarmCheck();
+    });
+    scheduleNextAlarmCheck();
     ensureStartupVisible();
     writeStartupLog("MainWindow: ensureStartupVisible complete");
     QTimer::singleShot(0, this, [this]() {
@@ -442,6 +463,8 @@ void MainWindow::setupUiState()
     m_aiConfigPage->setConfigText(configPath = m_aiService->config().sourcePath,
                                   AppConfig::loadConfigText(&configPath));
     writeStartupLog("MainWindow: ai config text loaded");
+    m_storagePage->setAlarmEnabled(m_alarmEnabled);
+    m_storagePage->setRingPath(m_alarmRingPath);
 
     showRootPage(m_loginPage);
     writeStartupLog("MainWindow: setupUiState end");
@@ -968,6 +991,51 @@ void MainWindow::connectSignals()
                 m_cacheService->formattedTotalCacheSize(),
                 m_applicationSizeService->formattedTotalApplicationSize());
         });
+    connect(
+        m_storagePage,
+        &StoragePage::alarmToggled,
+        this,
+        [this](bool enabled) {
+            m_alarmEnabled = enabled;
+            if (m_deadlineAlarmService != nullptr) {
+                m_deadlineAlarmService->setEnabled(enabled);
+                if (enabled) {
+                    m_deadlineAlarmService->processReminders(m_currentReminders);
+                }
+            }
+            QString errorMessage;
+            if (!AppConfig::saveAlarmEnabled(enabled, &errorMessage)) {
+                m_storagePage->showOperationFailed(errorMessage);
+            }
+        });
+    connect(
+        m_storagePage,
+        &StoragePage::alarmTestRequested,
+        this,
+        [this]() {
+            showAlarmNotification("Contest deadline alarm",
+                                  "Alarm test\nThis is a manual test notification.");
+            playAlarmSound();
+        });
+    connect(
+        m_storagePage,
+        &StoragePage::ringPathPickRequested,
+        this,
+        [this]() {
+            const QString path = QFileDialog::getOpenFileName(
+                this,
+                "Choose Ring Audio",
+                QString(),
+                "Audio Files (*.wav *.mp3 *.ogg *.flac *.m4a);;All Files (*)");
+            if (!path.isEmpty()) {
+                m_alarmRingPath = path;
+                m_storagePage->setRingPath(path);
+                QString errorMessage;
+                if (!AppConfig::saveRingPath(path, &errorMessage)) {
+                    m_storagePage->showOperationFailed(errorMessage);
+                }
+            }
+        });
 
     connect(
         m_aiService,
@@ -1214,7 +1282,21 @@ void MainWindow::connectSignals()
         &ReminderService::remindersUpdated,
         this,
         [this](const QList<DeadlineReminder> &reminders) {
+            m_currentReminders = reminders;
             m_homePage->showReminders(reminders);
+        });
+    connect(
+        m_deadlineAlarmService,
+        &DeadlineAlarmService::alarmTriggered,
+        this,
+        [this](const DeadlineReminder &reminder, int hoursBefore) {
+            const QString text = QString("%1\n%2\nDeadline: %3\n%4 hour(s) left")
+                                     .arg(reminder.courseName,
+                                          reminder.contestTitle,
+                                          reminder.deadlineText,
+                                          QString::number(hoursBefore));
+            showAlarmNotification("Contest deadline alarm", text);
+            playAlarmSound();
         });
 
     connect(
@@ -1538,6 +1620,62 @@ bool MainWindow::requiresEmailVerification(const QString &email) const
 
     CachedLoginInfo loginInfo;
     return !m_loginCacheService->tryLoadLoginByEmail(normalizedEmail, &loginInfo);
+}
+
+void MainWindow::showAlarmNotification(const QString &title, const QString &text)
+{
+    if (m_trayIcon == nullptr || !m_trayIcon->isVisible()) {
+        return;
+    }
+    m_trayIcon->showMessage(title, text, QSystemTrayIcon::Warning, 6000);
+}
+
+void MainWindow::playAlarmSound()
+{
+    if (m_alarmPlayer == nullptr || m_alarmAudioOutput == nullptr) {
+        return;
+    }
+    if (m_alarmRingPath.trimmed().isEmpty()) {
+        return;
+    }
+
+    const QFileInfo fileInfo(m_alarmRingPath);
+    if (!fileInfo.exists() || !fileInfo.isFile()) {
+        if (m_storagePage != nullptr) {
+            m_storagePage->showOperationFailed("Ring file not found.");
+        }
+        return;
+    }
+
+    m_alarmPlayer->stop();
+    m_alarmPlayer->setSource(QUrl::fromLocalFile(fileInfo.absoluteFilePath()));
+    m_alarmPlayer->play();
+}
+
+void MainWindow::scheduleNextAlarmCheck()
+{
+    if (m_alarmCheckTimer == nullptr) {
+        return;
+    }
+
+    const QDateTime now = QDateTime::currentDateTime();
+    const int nextHourValue = (now.time().hour() + 1) % 24;
+    QDate nextDate = now.date();
+    if (nextHourValue == 0) {
+        nextDate = nextDate.addDays(1);
+    }
+    const QDateTime nextHour(nextDate, QTime(nextHourValue, 0, 0, 0));
+    const qint64 delayMs = qMax<qint64>(1000, now.msecsTo(nextHour));
+    m_alarmCheckTimer->start(static_cast<int>(delayMs));
+}
+
+void MainWindow::runHourlyAlarmCheck()
+{
+    if (!m_alarmEnabled || m_deadlineAlarmService == nullptr) {
+        return;
+    }
+
+    m_deadlineAlarmService->processReminders(m_currentReminders);
 }
 
 void MainWindow::applyLoginCacheState(const QString &email)

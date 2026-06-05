@@ -6,6 +6,7 @@
 #include <QLabel>
 #include <QPainter>
 #include <QPushButton>
+#include <QSignalBlocker>
 #include <QVariantAnimation>
 #include <QVBoxLayout>
 
@@ -163,14 +164,29 @@ StoragePage::StoragePage(QWidget *parent)
     alarmRow->addStretch();
     alarmRow->addWidget(m_alarmToggleButton);
 
-    auto *autoRow = new QHBoxLayout();
-    auto *autoLabel = new QLabel("Auto", contentFrame);
-    autoLabel->setObjectName("storageLabel");
-    m_autoToggleButton = new SlideSwitch(contentFrame);
-    m_autoToggleButton->setCheckable(true);
-    autoRow->addWidget(autoLabel);
-    autoRow->addStretch();
-    autoRow->addWidget(m_autoToggleButton);
+    auto *alarmTestRow = new QHBoxLayout();
+    auto *alarmTestLabel = new QLabel("Alarm Test", contentFrame);
+    alarmTestLabel->setObjectName("storageLabel");
+    m_alarmTestButton = new QPushButton("alarm test", contentFrame);
+    m_alarmTestButton->setObjectName("storageClearButton");
+    alarmTestRow->addWidget(alarmTestLabel);
+    alarmTestRow->addStretch();
+    alarmTestRow->addWidget(m_alarmTestButton);
+
+    auto *ringRow = new QHBoxLayout();
+    auto *ringLabel = new QLabel("Ring", contentFrame);
+    ringLabel->setObjectName("storageLabel");
+    m_ringPathValueLabel = new QLabel("No file selected", contentFrame);
+    m_ringPathValueLabel->setObjectName("storagePathLabel");
+    m_ringPathValueLabel->setWordWrap(true);
+    m_ringPathValueLabel->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    m_ringPathButton = new QPushButton("choose", contentFrame);
+    m_ringPathButton->setObjectName("storageClearButton");
+    ringRow->addWidget(ringLabel);
+    ringRow->addSpacing(18);
+    ringRow->addWidget(m_ringPathValueLabel, 1);
+    ringRow->addSpacing(12);
+    ringRow->addWidget(m_ringPathButton);
 
     m_statusLabel = new QLabel(contentFrame);
     m_statusLabel->setObjectName("storageStatusLabel");
@@ -182,7 +198,8 @@ StoragePage::StoragePage(QWidget *parent)
     contentLayout->addLayout(cacheRow);
     contentLayout->addLayout(appRow);
     contentLayout->addLayout(alarmRow);
-    contentLayout->addLayout(autoRow);
+    contentLayout->addLayout(alarmTestRow);
+    contentLayout->addLayout(ringRow);
     contentLayout->addWidget(m_statusLabel);
     contentLayout->addStretch();
     contentLayout->addWidget(m_clearCacheButton, 0, Qt::AlignLeft);
@@ -258,6 +275,10 @@ StoragePage::StoragePage(QWidget *parent)
         "  font-size: 16px;"
         "  color: #1f2328;"
         "}"
+        "#storagePathLabel {"
+        "  font-size: 14px;"
+        "  color: #52606d;"
+        "}"
         "#storageStatusLabel {"
         "  min-height: 20px;"
         "  color: #7a4b36;"
@@ -281,17 +302,16 @@ StoragePage::StoragePage(QWidget *parent)
         });
     connect(m_clearCacheButton, &QPushButton::clicked,
             this, &StoragePage::clearCacheRequested);
+    connect(m_alarmTestButton, &QPushButton::clicked,
+            this, &StoragePage::alarmTestRequested);
+    connect(m_ringPathButton, &QPushButton::clicked,
+            this, &StoragePage::ringPathPickRequested);
     connect(m_alarmToggleButton, &QAbstractButton::toggled, this, [this](bool checked) {
         m_alarmEnabled = checked;
         if (m_alarmToggleButton != nullptr) {
             m_alarmToggleButton->setChecked(m_alarmEnabled);
         }
-    });
-    connect(m_autoToggleButton, &QAbstractButton::toggled, this, [this](bool checked) {
-        m_autoEnabled = checked;
-        if (m_autoToggleButton != nullptr) {
-            m_autoToggleButton->setChecked(m_autoEnabled);
-        }
+        emit alarmToggled(m_alarmEnabled);
     });
 }
 
@@ -321,6 +341,25 @@ void StoragePage::showClearing(bool clearing)
     if (clearing) {
         m_statusLabel->setText("Clearing cache...");
     }
+}
+
+void StoragePage::setAlarmEnabled(bool enabled)
+{
+    m_alarmEnabled = enabled;
+    if (m_alarmToggleButton == nullptr) {
+        return;
+    }
+
+    const QSignalBlocker blocker(m_alarmToggleButton);
+    m_alarmToggleButton->setChecked(enabled);
+}
+
+void StoragePage::setRingPath(const QString &path)
+{
+    if (m_ringPathValueLabel == nullptr) {
+        return;
+    }
+    m_ringPathValueLabel->setText(path.trimmed().isEmpty() ? "No file selected" : path);
 }
 
 void StoragePage::setToolsExpanded(bool expanded)
@@ -362,6 +401,7 @@ void StoragePage::setDarkMode(bool dark)
         "#storageTitleLabel, #storageLabel, #storageValueLabel, #storageToolsToggleButton, #storageToolButton, #storageToolIconButton {"
         "  color: #d9e1e8;"
         "}"
+        "#storagePathLabel { color: #a9b7c5; }"
         "#storageClearButton {"
         "  border: 1px solid #3a4652;"
         "  background: #202a34;"

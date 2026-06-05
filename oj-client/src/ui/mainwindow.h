@@ -2,6 +2,7 @@
 #define MAINWINDOW_H
 
 #include "parser/problemparser.h"
+#include "service/reminder/reminderservice.h"
 
 #include <QCloseEvent>
 #include <QMainWindow>
@@ -40,6 +41,7 @@ class FavoriteProblemService;
 class ResultService;
 class SubmitService;
 class ReminderService;
+class DeadlineAlarmService;
 class LoginPage;
 class HomePage;
 class AiConfigPage;
@@ -52,6 +54,9 @@ class QWidget;
 class QAction;
 class QMenu;
 class QSystemTrayIcon;
+class QAudioOutput;
+class QMediaPlayer;
+class QTimer;
 
 class MainWindow : public QMainWindow
 {
@@ -81,6 +86,10 @@ private:
     void saveCurrentProblemToFavorites();
     bool requiresEmailVerification(const QString &email) const;
     void applyLoginCacheState(const QString &email);
+    void showAlarmNotification(const QString &title, const QString &text);
+    void playAlarmSound();
+    void scheduleNextAlarmCheck();
+    void runHourlyAlarmCheck();
 
 private:
     Ui::MainWindow *ui;
@@ -114,6 +123,7 @@ private:
     SubmitService *m_submitService = nullptr;
     ClassRepository *m_reminderClassRepository = nullptr;
     ReminderService *m_reminderService = nullptr;
+    DeadlineAlarmService *m_deadlineAlarmService = nullptr;
     LoginPage *m_loginPage = nullptr;
     HomePage *m_homePage = nullptr;
     AiConfigPage *m_aiConfigPage = nullptr;
@@ -132,10 +142,16 @@ private:
     QString m_aiConfigSummary;
     QString m_pendingAiRunTestCallId;
     QString m_pendingAiSubmitCallId;
+    bool m_alarmEnabled = false;
     QSystemTrayIcon *m_trayIcon = nullptr;
     QMenu *m_trayMenu = nullptr;
     QAction *m_restoreTrayAction = nullptr;
     QAction *m_exitTrayAction = nullptr;
+    QMediaPlayer *m_alarmPlayer = nullptr;
+    QAudioOutput *m_alarmAudioOutput = nullptr;
+    QTimer *m_alarmCheckTimer = nullptr;
+    QList<DeadlineReminder> m_currentReminders;
+    QString m_alarmRingPath;
     bool m_allowClose = false;
     bool m_trayNoticeShown = false;
     bool m_darkMode = false;

@@ -20,12 +20,17 @@ public:
     void showClearSucceeded(const QString &cacheSize, const QString &appSize);
     void showOperationFailed(const QString &message);
     void showClearing(bool clearing);
+    void setAlarmEnabled(bool enabled);
+    void setRingPath(const QString &path);
 
 signals:
     void backRequested();
     void homeRequested();
     void themeToggleRequested(bool dark);
     void clearCacheRequested();
+    void alarmTestRequested();
+    void ringPathPickRequested();
+    void alarmToggled(bool enabled);
 
 private:
     void setToolsExpanded(bool expanded);
@@ -39,11 +44,12 @@ private:
     QLabel *m_cacheSizeValueLabel = nullptr;
     QLabel *m_appSizeValueLabel = nullptr;
     QAbstractButton *m_alarmToggleButton = nullptr;
-    QAbstractButton *m_autoToggleButton = nullptr;
+    QLabel *m_ringPathValueLabel = nullptr;
     QLabel *m_statusLabel = nullptr;
+    QPushButton *m_alarmTestButton = nullptr;
+    QPushButton *m_ringPathButton = nullptr;
     QPushButton *m_clearCacheButton = nullptr;
     bool m_toolsExpanded = true;
     bool m_darkMode = false;
     bool m_alarmEnabled = false;
-    bool m_autoEnabled = false;
 };

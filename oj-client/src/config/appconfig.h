@@ -16,8 +16,12 @@ class AppConfig
 {
 public:
     static OpenAiConfig loadOpenAiConfig();
+    static bool loadAlarmEnabled(bool defaultValue = false);
+    static QString loadRingPath();
     static QString loadConfigText(QString *sourcePath = nullptr);
+    static bool saveAlarmEnabled(bool enabled, QString *errorMessage = nullptr);
     static bool saveOpenAiConfig(const OpenAiConfig &config, QString *errorMessage = nullptr);
+    static bool saveRingPath(const QString &path, QString *errorMessage = nullptr);
     static bool saveConfigText(const QString &content,
                                QString *savedPath = nullptr,
                                QString *errorMessage = nullptr);

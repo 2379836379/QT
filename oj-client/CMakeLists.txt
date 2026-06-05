@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.19)
 project(oj LANGUAGES CXX)
 
-find_package(Qt6 6.5 REQUIRED COMPONENTS Core Widgets Network Sql)
+find_package(Qt6 6.5 REQUIRED COMPONENTS Core Widgets Network Sql Multimedia)
 
 qt_standard_project_setup()
 
@@ -89,6 +89,8 @@ qt_add_executable(oj
     src/service/ai/aiservice.h
     src/service/cache/cacheservice.cpp
     src/service/cache/cacheservice.h
+    src/service/reminder/deadlinealarmservice.cpp
+    src/service/reminder/deadlinealarmservice.h
     src/service/reminder/reminderservice.cpp
     src/service/reminder/reminderservice.h
     src/service/submit/resultservice.cpp
@@ -116,6 +118,7 @@ target_link_libraries(oj
         Qt::Widgets
         Qt::Network
         Qt::Sql
+        Qt::Multimedia
 )
 
 if (WIN32)

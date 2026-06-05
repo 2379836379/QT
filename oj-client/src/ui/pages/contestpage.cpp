@@ -1,13 +1,90 @@
 #include "ui/pages/contestpage.h"
 
+#include <QApplication>
 #include <QFrame>
-#include <QHBoxLayout>
 #include <QLabel>
 #include <QListWidget>
 #include <QListWidgetItem>
+#include <QPainter>
 #include <QPushButton>
-#include <QSizePolicy>
+#include <QStyledItemDelegate>
 #include <QVBoxLayout>
+
+namespace
+{
+constexpr int ProblemTextRole = Qt::UserRole + 1;
+constexpr int ProblemSolvedRole = Qt::UserRole + 2;
+
+class ContestProblemDelegate final : public QStyledItemDelegate
+{
+public:
+    explicit ContestProblemDelegate(QObject *parent = nullptr)
+        : QStyledItemDelegate(parent)
+    {
+    }
+
+    void paint(QPainter *painter,
+               const QStyleOptionViewItem &option,
+               const QModelIndex &index) const override
+    {
+        QStyleOptionViewItem opt(option);
+        initStyleOption(&opt, index);
+        opt.text.clear();
+
+        QStyle *style = opt.widget != nullptr ? opt.widget->style() : QApplication::style();
+        style->drawPrimitive(QStyle::PE_PanelItemViewItem, &opt, painter, opt.widget);
+
+        painter->save();
+
+        const QRect contentRect = opt.rect.adjusted(16, 0, -16, 0);
+        const QString title = index.data(ProblemTextRole).toString();
+        const bool solved = index.data(ProblemSolvedRole).toBool();
+        const QString statusText = solved ? QString("finished") : QString();
+
+        QColor titleColor = QColor("#1f2328");
+        QColor statusColor = QColor("#5e675f");
+        if (opt.state & QStyle::State_Selected) {
+            titleColor = QColor("#12343b");
+            statusColor = QColor("#12343b");
+        }
+
+        const int statusSpacing = statusText.isEmpty() ? 0 : 16;
+        const int statusWidth = statusText.isEmpty()
+            ? 0
+            : QFontMetrics(opt.font).horizontalAdvance(statusText);
+        QRect titleRect = contentRect;
+        if (statusWidth > 0) {
+            titleRect.setRight(contentRect.right() - statusWidth - statusSpacing);
+        }
+
+        painter->setFont(opt.font);
+        painter->setPen(titleColor);
+        painter->drawText(titleRect,
+                          Qt::AlignVCenter | Qt::AlignLeft,
+                          QFontMetrics(opt.font).elidedText(title, Qt::ElideRight, titleRect.width()));
+
+        if (!statusText.isEmpty()) {
+            QFont statusFont = opt.font;
+            statusFont.setBold(true);
+            painter->setFont(statusFont);
+            painter->setPen(statusColor);
+            painter->drawText(contentRect,
+                              Qt::AlignVCenter | Qt::AlignRight,
+                              statusText);
+        }
+
+        painter->restore();
+    }
+
+    QSize sizeHint(const QStyleOptionViewItem &option,
+                   const QModelIndex &index) const override
+    {
+        QSize size = QStyledItemDelegate::sizeHint(option, index);
+        size.setHeight(qMax(size.height(), 42));
+        return size;
+    }
+};
+}
 
 ContestPage::ContestPage(QWidget *parent)
     : QWidget(parent)
@@ -88,6 +165,7 @@ ContestPage::ContestPage(QWidget *parent)
     m_problemListWidget = new QListWidget(contentFrame);
     m_problemListWidget->setObjectName("contestProblemList");
     m_problemListWidget->setMinimumHeight(420);
+    m_problemListWidget->setItemDelegate(new ContestProblemDelegate(m_problemListWidget));
 
     contentLayout->addWidget(problemLabel);
     contentLayout->addWidget(m_problemListWidget, 1);
@@ -179,13 +257,6 @@ ContestPage::ContestPage(QWidget *parent)
         "#contestProblemList::item:hover {"
         "  background: #eef4ef;"
         "}"
-        "#contestProblemTitleLabel {"
-        "  color: #1f2328;"
-        "}"
-        "#contestProblemStatusLabel {"
-        "  color: #5e675f;"
-        "  font-weight: 600;"
-        "}"
     );
 
     setToolsExpanded(true);
@@ -263,28 +334,8 @@ void ContestPage::showProblems(const ContestPageInfo &contestPageInfo)
         const QString text = QString("%1 %2").arg(problem.problemId, problem.title);
         auto *item = new QListWidgetItem(text, m_problemListWidget);
         item->setData(Qt::UserRole, problem.problemUrl);
-
-        auto *rowWidget = new QWidget(m_problemListWidget);
-        auto *rowLayout = new QHBoxLayout(rowWidget);
-        rowLayout->setContentsMargins(0, 0, 0, 0);
-        rowLayout->setSpacing(12);
-
-        auto *titleLabel = new QLabel(text, rowWidget);
-        titleLabel->setObjectName("contestProblemTitleLabel");
-        titleLabel->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
-
-        rowLayout->addWidget(titleLabel, 1);
-        rowLayout->addStretch();
-
-        if (problem.solved) {
-            auto *statusLabel = new QLabel("finished", rowWidget);
-            statusLabel->setObjectName("contestProblemStatusLabel");
-            statusLabel->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
-            rowLayout->addWidget(statusLabel, 0, Qt::AlignRight);
-        }
-
-        item->setSizeHint(rowWidget->sizeHint());
-        m_problemListWidget->setItemWidget(item, rowWidget);
+        item->setData(ProblemTextRole, text);
+        item->setData(ProblemSolvedRole, problem.solved);
     }
 }
 
@@ -321,11 +372,6 @@ void ContestPage::setDarkMode(bool dark)
         "}"
         "#contestProblemList::item:hover {"
         "  background: #26313c;"
-        "}"
-        "#contestProblemTitleLabel { color: #e8edf2; }"
-        "#contestProblemStatusLabel {"
-        "  color: #9fc4a7;"
-        "  font-weight: 600;"
         "}";
 
     setStyleSheet(dark ? lightStyle + darkOverride : lightStyle);
