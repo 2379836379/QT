@@ -12,6 +12,9 @@ oj-judger-api.md
 config.toml
 oj-client/installer-out/
 
+*.mp4
+
+
 
 
 
