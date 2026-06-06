@@ -1,4 +1,5 @@
 #include "ui/pages/storagepage.h"
+#include "ui/lightmodeiconhelper.h"
 
 #include <QAbstractButton>
 #include <QFrame>
@@ -89,10 +90,10 @@ StoragePage::StoragePage(QWidget *parent)
 
     topLayout->addWidget(titleLabel, 1);
     auto *homeButton = new QPushButton("Home", topFrame);
-    homeButton->setObjectName("storageClearButton");
+    homeButton->setObjectName("storageTopActionButton");
     topLayout->addWidget(homeButton, 0, Qt::AlignRight);
     auto *themeButton = new QPushButton("Dark Mode", topFrame);
-    themeButton->setObjectName("storageClearButton");
+    themeButton->setObjectName("storageTopActionButton");
     topLayout->addWidget(themeButton, 0, Qt::AlignRight);
 
     auto *bottomLayout = new QHBoxLayout();
@@ -210,6 +211,14 @@ StoragePage::StoragePage(QWidget *parent)
     layout->addWidget(topFrame);
     layout->addLayout(bottomLayout, 1);
 
+    homeButton->setToolTip("Home");
+    themeButton->setToolTip("Dark Mode");
+    m_backToolButton->setToolTip("Back");
+    m_collapsedBackButton->setToolTip("Back");
+    LightModeIconHelper::applyIcon(homeButton, "homepage.svg");
+    LightModeIconHelper::applyIcon(themeButton, "dark-mode.png");
+    LightModeIconHelper::applyIcon(m_collapsedBackButton, "back.svg");
+
     setStyleSheet(
         "StoragePage { background: #f3f1eb; }"
         "#storageTopFrame, #storageLeftFrame, #storageContentFrame {"
@@ -239,6 +248,17 @@ StoragePage::StoragePage(QWidget *parent)
         "}"
         "#storageToolButton:hover, #storageToolIconButton:hover {"
         "  background: #eef4ef;"
+        "}"
+        "#storageTopActionButton {"
+        "  min-width: 36px;"
+        "  padding: 6px;"
+        "  border: none;"
+        "  border-radius: 0px;"
+        "  background: transparent;"
+        "  color: #2f3a33;"
+        "}"
+        "#storageTopActionButton:hover {"
+        "  background: transparent;"
         "}"
         "#storageClearButton {"
         "  padding: 10px 14px;"
@@ -379,7 +399,8 @@ void StoragePage::setToolsExpanded(bool expanded)
         m_collapsedBackButton->setVisible(!expanded);
     }
     if (m_toolsToggleButton != nullptr) {
-        m_toolsToggleButton->setText(expanded ? "Tools v" : ">");
+        m_toolsToggleButton->setToolTip(expanded ? "Collapse Tools" : "Expand Tools");
+        LightModeIconHelper::applyToolsToggleIcon(m_toolsToggleButton, expanded);
     }
 }
 
@@ -402,12 +423,17 @@ void StoragePage::setDarkMode(bool dark)
         "  color: #d9e1e8;"
         "}"
         "#storagePathLabel { color: #a9b7c5; }"
+        "#storageTopActionButton {"
+        "  border: none;"
+        "  background: transparent;"
+        "  color: #e8edf2;"
+        "}"
         "#storageClearButton {"
         "  border: 1px solid #3a4652;"
         "  background: #202a34;"
         "  color: #e8edf2;"
         "}"
-        "#storageClearButton:hover, #storageToolButton:hover, #storageToolIconButton:hover {"
+        "#storageTopActionButton:hover, #storageClearButton:hover, #storageToolButton:hover, #storageToolIconButton:hover {"
         "  background: #26313c;"
         "}"
         "#storageStatusLabel { color: #f0b48a; }";

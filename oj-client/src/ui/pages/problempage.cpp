@@ -1,4 +1,5 @@
 #include "ui/pages/problempage.h"
+#include "ui/lightmodeiconhelper.h"
 
 #include <QComboBox>
 #include <QCoreApplication>
@@ -714,13 +715,13 @@ ProblemPage::ProblemPage(QWidget *parent)
     m_titleLabel = new QLabel("Problem", topFrame);
     m_titleLabel->setObjectName("problemTitleLabel");
     auto *homeButton = new QPushButton("Home", topFrame);
-    homeButton->setObjectName("problemRefreshButton");
+    homeButton->setObjectName("problemTopActionButton");
     auto *themeButton = new QPushButton("Dark Mode", topFrame);
-    themeButton->setObjectName("problemRefreshButton");
+    themeButton->setObjectName("problemTopActionButton");
     m_translateButton = new QPushButton("Translate", topFrame);
     m_translateButton->setObjectName("problemRefreshButton");
     auto *refreshButton = new QPushButton("Refresh", topFrame);
-    refreshButton->setObjectName("problemRefreshButton");
+    refreshButton->setObjectName("problemTopActionButton");
 
     topLayout->addWidget(m_titleLabel, 1);
     topLayout->addWidget(homeButton, 0, Qt::AlignRight);
@@ -768,7 +769,7 @@ ProblemPage::ProblemPage(QWidget *parent)
     m_collapsedFavoriteButton = new QPushButton("F", m_collapsedToolsPanel);
     m_collapsedFavoriteButton->setObjectName("problemToolIconButton");
     m_collapsedFavoriteButton->setToolTip("Favorite Current Problem");
-    m_collapsedAiButton = new QPushButton("A", m_collapsedToolsPanel);
+    m_collapsedAiButton = new QPushButton("Ai", m_collapsedToolsPanel);
     m_collapsedAiButton->setObjectName("problemToolIconButton");
     m_collapsedAiButton->setToolTip("AI");
     collapsedLayout->addWidget(m_collapsedBackButton);
@@ -959,6 +960,19 @@ ProblemPage::ProblemPage(QWidget *parent)
 
     layout->addWidget(topFrame);
     layout->addLayout(bottomLayout, 1);
+
+    homeButton->setToolTip("Home");
+    themeButton->setToolTip("Dark Mode");
+    refreshButton->setToolTip("Refresh");
+    m_backToolButton->setToolTip("Back");
+    m_favoriteToolButton->setToolTip("Favorite Current Problem");
+    m_collapsedBackButton->setToolTip("Back");
+    m_collapsedFavoriteButton->setToolTip("Favorite Current Problem");
+    LightModeIconHelper::applyIcon(homeButton, "homepage.svg");
+    LightModeIconHelper::applyIcon(themeButton, "dark-mode.png");
+    LightModeIconHelper::applyIcon(refreshButton, "refresh.svg");
+    LightModeIconHelper::applyIcon(m_collapsedBackButton, "back.svg");
+    LightModeIconHelper::applyIcon(m_collapsedFavoriteButton, "favorite.png");
     writeStartupLog("ProblemPage: layout assembly complete");
 
     setStyleSheet(
@@ -1032,6 +1046,17 @@ ProblemPage::ProblemPage(QWidget *parent)
         "}"
         "#problemBackButton:hover, #problemSubmitButton:hover, #problemInputButton:hover {"
         "  background: #eef4ef;"
+        "}"
+        "#problemTopActionButton {"
+        "  min-width: 36px;"
+        "  padding: 6px;"
+        "  border: none;"
+        "  border-radius: 0px;"
+        "  background: transparent;"
+        "  color: #243029;"
+        "}"
+        "#problemTopActionButton:hover {"
+        "  background: transparent;"
         "}"
         "#problemRefreshButton {"
         "  min-width: 88px;"
@@ -1236,7 +1261,8 @@ void ProblemPage::setToolsExpanded(bool expanded)
         }
     }
     if (m_toolsToggleButton != nullptr) {
-        m_toolsToggleButton->setText(expanded ? "Tools v" : ">");
+        m_toolsToggleButton->setToolTip(expanded ? "Collapse Tools" : "Expand Tools");
+        LightModeIconHelper::applyToolsToggleIcon(m_toolsToggleButton, expanded);
     }
 }
 
@@ -1865,12 +1891,17 @@ void ProblemPage::setDarkMode(bool dark)
         "#problemTitleLabel, #problemSectionLabel, #problemToolsToggleButton, #problemToolButton, #problemToolIconButton, #problemAiConfigLabel, #problemAiFieldLabel, #problemAiMetaLabel {"
         "  color: #d9e1e8;"
         "}"
+        "#problemTopActionButton {"
+        "  border: none;"
+        "  background: transparent;"
+        "  color: #e8edf2;"
+        "}"
         "#problemRefreshButton, #problemInputButton, #problemSubmitButton, #problemResultTabButton {"
         "  border: 1px solid #3a4652;"
         "  background: #202a34;"
         "  color: #e8edf2;"
         "}"
-        "#problemRefreshButton:hover, #problemInputButton:hover, #problemSubmitButton:hover, #problemResultTabButton:hover, #problemToolButton:hover, #problemToolIconButton:hover {"
+        "#problemTopActionButton:hover, #problemRefreshButton:hover, #problemInputButton:hover, #problemSubmitButton:hover, #problemResultTabButton:hover, #problemToolButton:hover, #problemToolIconButton:hover {"
         "  background: #26313c;"
         "}"
         "#problemResultTabButton:checked {"

@@ -11,6 +11,8 @@ qt_add_executable(oj
     src/ui/mainwindow.cpp
     src/ui/mainwindow.h
     src/ui/mainwindow.ui
+    src/ui/lightmodeiconhelper.cpp
+    src/ui/lightmodeiconhelper.h
     src/ui/pages/loginpage.cpp
     src/ui/pages/loginpage.h
     src/ui/pages/aiconfigpage.cpp

@@ -1,4 +1,5 @@
 #include "ui/pages/contestpage.h"
+#include "ui/lightmodeiconhelper.h"
 
 #include <QApplication>
 #include <QFrame>
@@ -41,11 +42,11 @@ public:
         const bool solved = index.data(ProblemSolvedRole).toBool();
         const QString statusText = solved ? QString("finished") : QString();
 
-        QColor titleColor = QColor("#1f2328");
-        QColor statusColor = QColor("#5e675f");
+        QColor titleColor = opt.palette.color(QPalette::Text);
+        QColor statusColor = opt.palette.color(QPalette::Mid);
         if (opt.state & QStyle::State_Selected) {
-            titleColor = QColor("#12343b");
-            statusColor = QColor("#12343b");
+            titleColor = opt.palette.color(QPalette::HighlightedText);
+            statusColor = opt.palette.color(QPalette::HighlightedText);
         }
 
         const int statusSpacing = statusText.isEmpty() ? 0 : 16;
@@ -105,13 +106,13 @@ ContestPage::ContestPage(QWidget *parent)
 
     topLayout->addWidget(m_titleLabel, 1);
     auto *homeButton = new QPushButton("Home", topFrame);
-    homeButton->setObjectName("contestRefreshButton");
+    homeButton->setObjectName("contestTopActionButton");
     topLayout->addWidget(homeButton, 0, Qt::AlignRight);
     auto *themeButton = new QPushButton("Dark Mode", topFrame);
-    themeButton->setObjectName("contestRefreshButton");
+    themeButton->setObjectName("contestTopActionButton");
     topLayout->addWidget(themeButton, 0, Qt::AlignRight);
     auto *refreshButton = new QPushButton("Refresh", topFrame);
-    refreshButton->setObjectName("contestRefreshButton");
+    refreshButton->setObjectName("contestTopActionButton");
     topLayout->addWidget(refreshButton, 0, Qt::AlignRight);
 
     auto *bottomLayout = new QHBoxLayout();
@@ -176,6 +177,16 @@ ContestPage::ContestPage(QWidget *parent)
     layout->addWidget(topFrame);
     layout->addLayout(bottomLayout, 1);
 
+    homeButton->setToolTip("Home");
+    themeButton->setToolTip("Dark Mode");
+    refreshButton->setToolTip("Refresh");
+    m_backToolButton->setToolTip("Back");
+    m_collapsedBackButton->setToolTip("Back");
+    LightModeIconHelper::applyIcon(homeButton, "homepage.svg");
+    LightModeIconHelper::applyIcon(themeButton, "dark-mode.png");
+    LightModeIconHelper::applyIcon(refreshButton, "refresh.svg");
+    LightModeIconHelper::applyIcon(m_collapsedBackButton, "back.svg");
+
     setStyleSheet(
         "ContestPage { background: #f3f1eb; }"
         "#contestTopFrame, #contestLeftFrame, #contestContentFrame {"
@@ -205,16 +216,16 @@ ContestPage::ContestPage(QWidget *parent)
         "#contestToolsToggleButton:hover {"
         "  color: #12343b;"
         "}"
-        "#contestRefreshButton {"
-        "  min-width: 88px;"
-        "  padding: 8px 14px;"
-        "  border: 1px solid #cdd7cf;"
-        "  border-radius: 10px;"
-        "  background: #f7f5ef;"
+        "#contestTopActionButton {"
+        "  min-width: 36px;"
+        "  padding: 6px;"
+        "  border: none;"
+        "  border-radius: 0px;"
+        "  background: transparent;"
         "  color: #243029;"
         "}"
-        "#contestRefreshButton:hover {"
-        "  background: #eef4ef;"
+        "#contestTopActionButton:hover {"
+        "  background: transparent;"
         "}"
         "#contestToolButton {"
         "  padding: 10px 12px;"
@@ -303,7 +314,8 @@ void ContestPage::setToolsExpanded(bool expanded)
         m_collapsedBackButton->setVisible(!expanded);
     }
     if (m_toolsToggleButton != nullptr) {
-        m_toolsToggleButton->setText(expanded ? "Tools v" : ">");
+        m_toolsToggleButton->setToolTip(expanded ? "Collapse Tools" : "Expand Tools");
+        LightModeIconHelper::applyToolsToggleIcon(m_toolsToggleButton, expanded);
     }
 }
 
@@ -357,12 +369,12 @@ void ContestPage::setDarkMode(bool dark)
         "#contestTitleLabel, #contestSectionLabel, #contestToolsToggleButton, #contestToolButton, #contestToolIconButton {"
         "  color: #d9e1e8;"
         "}"
-        "#contestRefreshButton {"
-        "  border: 1px solid #3a4652;"
-        "  background: #202a34;"
+        "#contestTopActionButton {"
+        "  border: none;"
+        "  background: transparent;"
         "  color: #e8edf2;"
         "}"
-        "#contestRefreshButton:hover, #contestToolButton:hover, #contestToolIconButton:hover {"
+        "#contestTopActionButton:hover, #contestToolButton:hover, #contestToolIconButton:hover {"
         "  background: #26313c;"
         "}"
         "#contestProblemList { color: #e8edf2; }"

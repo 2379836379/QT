@@ -38,6 +38,7 @@
 #include "ui/pages/aiconfigpage.h"
 #include "ui/pages/favoritepage.h"
 #include "ui/pages/homepage.h"
+#include "ui/lightmodeiconhelper.h"
 #include "ui/pages/loginpage.h"
 #include "ui/pages/problempage.h"
 #include "ui/pages/storagepage.h"
@@ -1457,6 +1458,7 @@ void MainWindow::setCurrentProblem(const ProblemPageInfo &problemPageInfo)
 void MainWindow::applyDarkMode(bool dark)
 {
     m_darkMode = dark;
+    LightModeIconHelper::setDarkModeEnabled(dark);
     if (ui != nullptr) {
         const QString rootStyle = dark
             ? QString(
@@ -1472,27 +1474,35 @@ void MainWindow::applyDarkMode(bool dark)
     }
     if (m_loginPage != nullptr) {
         m_loginPage->setDarkMode(dark);
+        LightModeIconHelper::refreshIcons(m_loginPage);
     }
     if (m_homePage != nullptr) {
         m_homePage->setDarkMode(dark);
+        LightModeIconHelper::refreshIcons(m_homePage);
     }
     if (m_classPage != nullptr) {
         m_classPage->setDarkMode(dark);
+        LightModeIconHelper::refreshIcons(m_classPage);
     }
     if (m_contestPage != nullptr) {
         m_contestPage->setDarkMode(dark);
+        LightModeIconHelper::refreshIcons(m_contestPage);
     }
     if (m_problemPage != nullptr) {
         m_problemPage->setDarkMode(dark);
+        LightModeIconHelper::refreshIcons(m_problemPage);
     }
     if (m_favoritePage != nullptr) {
         m_favoritePage->setDarkMode(dark);
+        LightModeIconHelper::refreshIcons(m_favoritePage);
     }
     if (m_storagePage != nullptr) {
         m_storagePage->setDarkMode(dark);
+        LightModeIconHelper::refreshIcons(m_storagePage);
     }
     if (m_aiConfigPage != nullptr) {
         m_aiConfigPage->setDarkMode(dark);
+        LightModeIconHelper::refreshIcons(m_aiConfigPage);
     }
 }
 

@@ -1,4 +1,5 @@
 #include "ui/pages/homepage.h"
+#include "ui/lightmodeiconhelper.h"
 
 #include "repository/cache/contestcacherepository.h"
 
@@ -77,6 +78,19 @@ QString buildHomePageStyle(bool dark)
             "}"
             "#homeRefreshButton:hover {"
             "  background: #eef4ef;"
+            "}"
+            "#homeTopIconButton {"
+            "  min-width: 38px;"
+            "  max-width: 38px;"
+            "  min-height: 38px;"
+            "  max-height: 38px;"
+            "  padding: 0px;"
+            "  border: none;"
+            "  border-radius: 10px;"
+            "  background: transparent;"
+            "}"
+            "#homeTopIconButton:hover {"
+            "  background: transparent;"
             "}"
             "#homeToolIconButton {"
             "  min-width: 36px;"
@@ -172,6 +186,19 @@ QString buildHomePageStyle(bool dark)
         "#homeRefreshButton:hover {"
         "  background: #293542;"
         "}"
+        "#homeTopIconButton {"
+        "  min-width: 38px;"
+        "  max-width: 38px;"
+        "  min-height: 38px;"
+        "  max-height: 38px;"
+        "  padding: 0px;"
+        "  border: none;"
+        "  border-radius: 10px;"
+        "  background: transparent;"
+        "}"
+        "#homeTopIconButton:hover {"
+        "  background: transparent;"
+        "}"
         "#homeToolIconButton {"
         "  min-width: 36px;"
         "  max-width: 36px;"
@@ -260,13 +287,13 @@ HomePage::HomePage(QWidget *parent)
 
     topLayout->addLayout(titleBlock, 1);
     auto *homeButton = new QPushButton("Home", topFrame);
-    homeButton->setObjectName("homeRefreshButton");
+    homeButton->setObjectName("homeTopIconButton");
     topLayout->addWidget(homeButton, 0, Qt::AlignRight);
     m_themeButton = new QPushButton("Dark Mode", topFrame);
-    m_themeButton->setObjectName("homeRefreshButton");
+    m_themeButton->setObjectName("homeTopIconButton");
     topLayout->addWidget(m_themeButton, 0, Qt::AlignRight);
     auto *refreshButton = new QPushButton("Refresh", topFrame);
-    refreshButton->setObjectName("homeRefreshButton");
+    refreshButton->setObjectName("homeTopIconButton");
     topLayout->addWidget(refreshButton, 0, Qt::AlignRight);
 
     auto *bottomLayout = new QHBoxLayout();
@@ -370,6 +397,25 @@ HomePage::HomePage(QWidget *parent)
     layout->addWidget(topFrame);
     layout->addLayout(bottomLayout, 1);
 
+    homeButton->setToolTip("Home");
+    m_themeButton->setToolTip("Dark Mode");
+    refreshButton->setToolTip("Refresh");
+    m_favoritesButton->setToolTip("Favorites");
+    m_storageButton->setToolTip("Set");
+    m_aiConfigButton->setToolTip("AI Config");
+    m_logoutButton->setToolTip("Log Out");
+    m_collapsedFavoritesButton->setToolTip("Favorites");
+    m_collapsedStorageButton->setToolTip("Set");
+    m_collapsedAiConfigButton->setToolTip("AI Config");
+    m_collapsedLogoutButton->setToolTip("Log Out");
+    LightModeIconHelper::applyIcon(homeButton, "homepage.svg");
+    LightModeIconHelper::applyIcon(m_themeButton, "dark-mode.png");
+    LightModeIconHelper::applyIcon(refreshButton, "refresh.svg");
+    LightModeIconHelper::applyIcon(m_collapsedFavoritesButton, "favorite.png");
+    LightModeIconHelper::applyIcon(m_collapsedStorageButton, "set.svg");
+    LightModeIconHelper::applyIcon(m_collapsedAiConfigButton, "ai-config.svg");
+    LightModeIconHelper::applyIcon(m_collapsedLogoutButton, "log out.svg");
+
     setDarkMode(false);
 
     setToolsExpanded(true);
@@ -430,9 +476,6 @@ void HomePage::setDarkMode(bool dark)
 {
     m_darkMode = dark;
     setStyleSheet(buildHomePageStyle(dark));
-    if (m_themeButton != nullptr) {
-        m_themeButton->setText(dark ? "Light Mode" : "Dark Mode");
-    }
 }
 
 void HomePage::setToolsExpanded(bool expanded)
@@ -458,7 +501,8 @@ void HomePage::setToolsExpanded(bool expanded)
         }
     }
     if (m_toolsToggleButton != nullptr) {
-        m_toolsToggleButton->setText(expanded ? "Tools v" : ">");
+        m_toolsToggleButton->setToolTip(expanded ? "Collapse Tools" : "Expand Tools");
+        LightModeIconHelper::applyToolsToggleIcon(m_toolsToggleButton, expanded);
     }
 }
 

@@ -1,4 +1,5 @@
 #include "ui/pages/favoritepage.h"
+#include "ui/lightmodeiconhelper.h"
 
 #include <QFrame>
 #include <QHBoxLayout>
@@ -26,11 +27,11 @@ FavoritePage::FavoritePage(QWidget *parent)
     auto *titleLabel = new QLabel("Favorites", topFrame);
     titleLabel->setObjectName("favoriteTitleLabel");
     auto *homeButton = new QPushButton("Home", topFrame);
-    homeButton->setObjectName("favoriteActionButton");
+    homeButton->setObjectName("favoriteTopActionButton");
     auto *themeButton = new QPushButton("Dark Mode", topFrame);
-    themeButton->setObjectName("favoriteActionButton");
+    themeButton->setObjectName("favoriteTopActionButton");
     auto *refreshButton = new QPushButton("Refresh", topFrame);
-    refreshButton->setObjectName("favoriteActionButton");
+    refreshButton->setObjectName("favoriteTopActionButton");
 
     topLayout->addWidget(titleLabel, 1);
     topLayout->addWidget(homeButton);
@@ -118,6 +119,16 @@ FavoritePage::FavoritePage(QWidget *parent)
     layout->addWidget(topFrame);
     layout->addLayout(bottomLayout, 1);
 
+    homeButton->setToolTip("Home");
+    themeButton->setToolTip("Dark Mode");
+    refreshButton->setToolTip("Refresh");
+    m_backToolButton->setToolTip("Back");
+    m_collapsedBackButton->setToolTip("Back");
+    LightModeIconHelper::applyIcon(homeButton, "homepage.svg");
+    LightModeIconHelper::applyIcon(themeButton, "dark-mode.png");
+    LightModeIconHelper::applyIcon(refreshButton, "refresh.svg");
+    LightModeIconHelper::applyIcon(m_collapsedBackButton, "back.svg");
+
     setStyleSheet(
         "FavoritePage { background: #f3f1eb; }"
         "#favoriteTopFrame, #favoriteLeftFrame, #favoriteContentFrame {"
@@ -157,6 +168,17 @@ FavoritePage::FavoritePage(QWidget *parent)
         "  font-size: 16px;"
         "  font-weight: 600;"
         "  color: #2f3a33;"
+        "}"
+        "#favoriteTopActionButton {"
+        "  min-width: 36px;"
+        "  padding: 6px;"
+        "  border: none;"
+        "  border-radius: 0px;"
+        "  background: transparent;"
+        "  color: #2f3a33;"
+        "}"
+        "#favoriteTopActionButton:hover {"
+        "  background: transparent;"
         "}"
         "#favoriteActionButton {"
         "  padding: 10px 14px;"
@@ -416,7 +438,8 @@ void FavoritePage::setToolsExpanded(bool expanded)
         m_collapsedBackButton->setVisible(!expanded);
     }
     if (m_toolsToggleButton != nullptr) {
-        m_toolsToggleButton->setText(expanded ? "Tools v" : ">");
+        m_toolsToggleButton->setToolTip(expanded ? "Collapse Tools" : "Expand Tools");
+        LightModeIconHelper::applyToolsToggleIcon(m_toolsToggleButton, expanded);
     }
 }
 
@@ -438,12 +461,17 @@ void FavoritePage::setDarkMode(bool dark)
         "#favoriteTitleLabel, #favoriteSectionLabel, #favoriteToolsToggleButton, #favoriteToolButton, #favoriteToolIconButton {"
         "  color: #d9e1e8;"
         "}"
+        "#favoriteTopActionButton {"
+        "  border: none;"
+        "  background: transparent;"
+        "  color: #e8edf2;"
+        "}"
         "#favoriteActionButton {"
         "  border: 1px solid #3a4652;"
         "  background: #202a34;"
         "  color: #e8edf2;"
         "}"
-        "#favoriteActionButton:hover, #favoriteToolButton:hover, #favoriteToolIconButton:hover {"
+        "#favoriteTopActionButton:hover, #favoriteActionButton:hover, #favoriteToolButton:hover, #favoriteToolIconButton:hover {"
         "  background: #26313c;"
         "}"
         "#favoriteStatusLabel { color: #f0b48a; }"

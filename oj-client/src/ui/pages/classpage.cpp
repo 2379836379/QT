@@ -1,4 +1,5 @@
 #include "ui/pages/classpage.h"
+#include "ui/lightmodeiconhelper.h"
 
 #include <QFrame>
 #include <QHBoxLayout>
@@ -27,13 +28,13 @@ ClassPage::ClassPage(QWidget *parent)
 
     topLayout->addWidget(m_titleLabel, 1);
     auto *homeButton = new QPushButton("Home", topFrame);
-    homeButton->setObjectName("classRefreshButton");
+    homeButton->setObjectName("classTopActionButton");
     topLayout->addWidget(homeButton, 0, Qt::AlignRight);
     auto *themeButton = new QPushButton("Dark Mode", topFrame);
-    themeButton->setObjectName("classRefreshButton");
+    themeButton->setObjectName("classTopActionButton");
     topLayout->addWidget(themeButton, 0, Qt::AlignRight);
     auto *refreshButton = new QPushButton("Refresh", topFrame);
-    refreshButton->setObjectName("classRefreshButton");
+    refreshButton->setObjectName("classTopActionButton");
     topLayout->addWidget(refreshButton, 0, Qt::AlignRight);
 
     auto *bottomLayout = new QHBoxLayout();
@@ -97,6 +98,16 @@ ClassPage::ClassPage(QWidget *parent)
     layout->addWidget(topFrame);
     layout->addLayout(bottomLayout, 1);
 
+    homeButton->setToolTip("Home");
+    themeButton->setToolTip("Dark Mode");
+    refreshButton->setToolTip("Refresh");
+    m_backToolButton->setToolTip("Back");
+    m_collapsedBackButton->setToolTip("Back");
+    LightModeIconHelper::applyIcon(homeButton, "homepage.svg");
+    LightModeIconHelper::applyIcon(themeButton, "dark-mode.png");
+    LightModeIconHelper::applyIcon(refreshButton, "refresh.svg");
+    LightModeIconHelper::applyIcon(m_collapsedBackButton, "back.svg");
+
     setStyleSheet(
         "ClassPage { background: #f3f1eb; }"
         "#classTopFrame, #classLeftFrame, #classContentFrame {"
@@ -126,16 +137,16 @@ ClassPage::ClassPage(QWidget *parent)
         "#classToolsToggleButton:hover {"
         "  color: #12343b;"
         "}"
-        "#classRefreshButton {"
-        "  min-width: 88px;"
-        "  padding: 8px 14px;"
-        "  border: 1px solid #cdd7cf;"
-        "  border-radius: 10px;"
-        "  background: #f7f5ef;"
+        "#classTopActionButton {"
+        "  min-width: 36px;"
+        "  padding: 6px;"
+        "  border: none;"
+        "  border-radius: 0px;"
+        "  background: transparent;"
         "  color: #243029;"
         "}"
-        "#classRefreshButton:hover {"
-        "  background: #eef4ef;"
+        "#classTopActionButton:hover {"
+        "  background: transparent;"
         "}"
         "#classToolButton {"
         "  padding: 10px 12px;"
@@ -224,7 +235,8 @@ void ClassPage::setToolsExpanded(bool expanded)
         m_collapsedBackButton->setVisible(!expanded);
     }
     if (m_toolsToggleButton != nullptr) {
-        m_toolsToggleButton->setText(expanded ? "Tools v" : ">");
+        m_toolsToggleButton->setToolTip(expanded ? "Collapse Tools" : "Expand Tools");
+        LightModeIconHelper::applyToolsToggleIcon(m_toolsToggleButton, expanded);
     }
 }
 
@@ -278,12 +290,12 @@ void ClassPage::setDarkMode(bool dark)
         "#classTitleLabel, #classSectionLabel, #classToolsToggleButton, #classToolButton, #classToolIconButton {"
         "  color: #d9e1e8;"
         "}"
-        "#classRefreshButton {"
-        "  border: 1px solid #3a4652;"
-        "  background: #202a34;"
+        "#classTopActionButton {"
+        "  border: none;"
+        "  background: transparent;"
         "  color: #e8edf2;"
         "}"
-        "#classRefreshButton:hover, #classToolButton:hover, #classToolIconButton:hover {"
+        "#classTopActionButton:hover, #classToolButton:hover, #classToolIconButton:hover {"
         "  background: #26313c;"
         "}"
         "#classContestList { color: #e8edf2; }"
