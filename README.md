@@ -1,6 +1,8 @@
 # oj-client
 
-`oj-client` 是一个基于 Qt Widgets 开发的 OpenJudge 桌面客户端，集成了题目浏览、代码提交、本地测试、AI 辅助、收藏、缓存管理、截止提醒和 Windows 安装打包能力。
+`oj-client` 是一个基于 Qt Widgets 开发的 OpenJudge 桌面客户端，集成了题目浏览、代码提交、本地测试、AI 辅助、收藏、缓存管理、截止提醒和 Windows 安装打包能力。  
+邮件验证服务 [OJ-server](https://github.com/2379836379/OJ-server)  
+程序测试服务 [OJ-judger](https://github.com/2379836379/OJ-judger)  
 
 ## 项目目标
 
