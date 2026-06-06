@@ -57,6 +57,7 @@
 #include <QMediaPlayer>
 #include <QFile>
 #include <QFileInfo>
+#include <QIcon>
 #include <QTextStream>
 #include <QTimer>
 #include <QUrl>
@@ -66,6 +67,22 @@
 
 namespace
 {
+QIcon loadAppWindowIcon()
+{
+    QIcon icon(":/images/icon-page-1.ico");
+    if (!icon.isNull()) {
+        return icon;
+    }
+
+    QDir dir(QCoreApplication::applicationDirPath());
+    if (dir.dirName().compare("build", Qt::CaseInsensitive) == 0) {
+        dir.cdUp();
+    }
+    const QString path = dir.filePath("images/icon-page-1.ico");
+    QIcon fileIcon(path);
+    return fileIcon;
+}
+
 QString normalizeJudgeLanguage(const QString &languageLabel)
 {
     const QString text = languageLabel.trimmed().toLower();
@@ -179,6 +196,85 @@ QString formatJudgeResult(const NetworkResult &result)
     return sections.join("\n\n");
 }
 
+QString extractJudgeStdout(const NetworkResult &result)
+{
+    const QJsonDocument document = QJsonDocument::fromJson(result.body);
+    if (!document.isObject()) {
+        return QString::fromUtf8(result.body);
+    }
+
+    const QJsonObject object = document.object();
+    if (object.contains("run") && object.value("run").isObject()) {
+        const QString stdoutText =
+            object.value("run").toObject().value("stdout").toString();
+        if (!stdoutText.isNull()) {
+            return stdoutText;
+        }
+    }
+
+    return object.value("stdout").toString();
+}
+
+QString extractJudgeDisplayText(const NetworkResult &result)
+{
+    const QJsonDocument document = QJsonDocument::fromJson(result.body);
+    if (!document.isObject()) {
+        return QString::fromUtf8(result.body);
+    }
+
+    const QJsonObject object = document.object();
+    const QJsonObject compileObject = object.value("compile").toObject();
+    const QJsonObject runObject = object.value("run").toObject();
+
+    const QString compileStatus = compileObject.value("status").toString();
+    const QString compileStderr = compileObject.value("stderr").toString();
+    const QString compileStdout = compileObject.value("stdout").toString();
+    if (!compileObject.isEmpty()
+        && compileStatus.compare("Accepted", Qt::CaseInsensitive) != 0
+        && compileStatus.compare("OK", Qt::CaseInsensitive) != 0
+        && compileStatus.compare("Success", Qt::CaseInsensitive) != 0) {
+        if (!compileStderr.isEmpty()) {
+            return compileStderr;
+        }
+        if (!compileStdout.isEmpty()) {
+            return compileStdout;
+        }
+        if (!compileStatus.isEmpty()) {
+            return compileStatus;
+        }
+    }
+
+    const QString runStatus = runObject.value("status").toString();
+    const QString runStdout = runObject.value("stdout").toString();
+    const QString runStderr = runObject.value("stderr").toString();
+    if (!runObject.isEmpty()) {
+        if (!runStatus.isEmpty()
+            && runStatus.compare("Accepted", Qt::CaseInsensitive) != 0
+            && runStatus.compare("OK", Qt::CaseInsensitive) != 0
+            && runStatus.compare("Success", Qt::CaseInsensitive) != 0) {
+            if (!runStderr.isEmpty()) {
+                return runStderr;
+            }
+            if (!runStatus.isEmpty()) {
+                return runStatus;
+            }
+        }
+        return runStdout;
+    }
+
+    const QString stdoutText = extractJudgeStdout(result);
+    if (!stdoutText.isEmpty()) {
+        return stdoutText;
+    }
+
+    const QString stderrText = object.value("stderr").toString();
+    if (!stderrText.isEmpty()) {
+        return stderrText;
+    }
+
+    return QString::fromUtf8(result.body);
+}
+
 QString formatJudgeRequest(const QString &language,
                            const QString &fileName,
                            const QString &sourceText,
@@ -233,6 +329,24 @@ QString formatSubmitResponse(const NetworkResult &result)
     return text;
 }
 
+QString formatResultPageSummary(const ResultPageInfo &resultPageInfo)
+{
+    QString text = QString("Submission ID: %1\nStatus: %2")
+                       .arg(resultPageInfo.submissionId.isEmpty()
+                                ? QString("<none>")
+                                : resultPageInfo.submissionId,
+                            resultPageInfo.statusText.isEmpty()
+                                ? QString("<none>")
+                                : resultPageInfo.statusText);
+    if (!resultPageInfo.detailTitle.isEmpty()) {
+        text += "\n" + resultPageInfo.detailTitle;
+    }
+    if (!resultPageInfo.detailText.isEmpty()) {
+        text += "\n" + resultPageInfo.detailText;
+    }
+    return text;
+}
+
 void writeStartupLog(const QString &message)
 {
     QDir dir(QCoreApplication::applicationDirPath());
@@ -259,6 +373,16 @@ MainWindow::MainWindow(QWidget *parent)
     writeStartupLog("MainWindow: constructor begin");
     ui->setupUi(this);
     writeStartupLog("MainWindow: ui setup complete");
+    setWindowTitle(QStringLiteral(" "));
+    setWindowFilePath(QString());
+    writeStartupLog("MainWindow: window title cleared");
+    const QIcon appIcon = loadAppWindowIcon();
+    if (!appIcon.isNull()) {
+        QApplication::setWindowIcon(appIcon);
+        setWindowIcon(appIcon);
+    }
+    writeStartupLog(QString("MainWindow: window icon applied, null=%1")
+                        .arg(windowIcon().isNull() ? "true" : "false"));
 
     m_client = new OpenJudgeClient(this);
     m_openAiClient = new OpenAiClient(this);
@@ -333,7 +457,7 @@ MainWindow::MainWindow(QWidget *parent)
                 sourceText,
                 stdinText);
             m_problemPage->showTesting(true);
-            m_problemPage->showTestResult(m_lastTestRequestLog + "\n\nRunning test...");
+            m_problemPage->showTestResult("Running test...");
             m_client->judgeSource(language,
                                   judgeFileNameForLanguage(language),
                                   sourceText.toUtf8(),
@@ -341,6 +465,7 @@ MainWindow::MainWindow(QWidget *parent)
         },
         [this](const QString &callId) {
             m_pendingAiSubmitCallId = callId;
+            m_pendingAiSubmitAwaitingResult = false;
             const QString languageValue = m_problemPage->currentLanguageValue();
             const QString sourceText = m_problemPage->currentSourceCode();
             if (languageValue.trimmed().isEmpty()) {
@@ -478,11 +603,13 @@ void MainWindow::setupTrayIcon()
     }
 
     m_trayIcon = new QSystemTrayIcon(this);
-    QIcon trayIcon = windowIcon();
+    QIcon trayIcon = loadAppWindowIcon();
     if (trayIcon.isNull()) {
         trayIcon = style()->standardIcon(QStyle::SP_MessageBoxInformation);
     }
     m_trayIcon->setIcon(trayIcon);
+    writeStartupLog(QString("MainWindow: tray icon applied, null=%1")
+                        .arg(trayIcon.isNull() ? "true" : "false"));
     m_trayIcon->setToolTip("oj-client");
 
     m_trayMenu = new QMenu(this);
@@ -802,21 +929,6 @@ void MainWindow::connectSignals()
     });
     connect(
         m_problemPage,
-        &ProblemPage::refreshRequested,
-        this,
-        [this]() {
-            const QUrl problemUrl = m_problemService->currentProblemUrl();
-            if (!problemUrl.isValid() || problemUrl.scheme().isEmpty()) {
-                return;
-            }
-            m_problemPage->openProblem(
-                m_currentProblemInfo.title.isEmpty()
-                    ? m_problemPage->windowTitle()
-                    : m_currentProblemInfo.title);
-            m_problemService->openProblem(problemUrl);
-        });
-    connect(
-        m_problemPage,
         &ProblemPage::favoriteRequested,
         this,
         &MainWindow::saveCurrentProblemToFavorites);
@@ -854,7 +966,7 @@ void MainWindow::connectSignals()
                 sourceText,
                 stdinText);
             m_problemPage->showTesting(true);
-            m_problemPage->showTestResult(m_lastTestRequestLog + "\n\nRunning test...");
+            m_problemPage->showTestResult("Running test...");
             m_client->judgeSource(language,
                                   judgeFileNameForLanguage(language),
                                   sourceText.toUtf8(),
@@ -1043,6 +1155,8 @@ void MainWindow::connectSignals()
         &AiService::responseDelta,
         this,
         [this](const QString &delta) {
+            writeStartupLog(QString("MainWindow: ai responseDelta len=%1")
+                                .arg(QString::number(delta.size())));
             m_problemPage->appendAiResponse(delta);
         });
     connect(
@@ -1057,6 +1171,8 @@ void MainWindow::connectSignals()
         &AiService::responseReady,
         this,
         [this](const QString &text) {
+            writeStartupLog(QString("MainWindow: ai responseReady len=%1")
+                                .arg(QString::number(text.size())));
             m_problemPage->showAiResponse(text);
         });
     connect(
@@ -1064,6 +1180,8 @@ void MainWindow::connectSignals()
         &AiService::failed,
         this,
         [this](const QString &message) {
+            writeStartupLog(QString("MainWindow: ai failed %1")
+                                .arg(message.left(200).replace('\n', ' ')));
             m_problemPage->showAiFailed(message);
             if (m_problemPage->isProblemTranslating()) {
                 m_problemPage->showProblemTranslationFailed(message);
@@ -1125,7 +1243,7 @@ void MainWindow::connectSignals()
                 }
                 return;
             }
-            m_problemPage->showTestResult(toolResultText);
+            m_problemPage->showTestResult(extractJudgeDisplayText(result));
             if (!m_pendingAiRunTestCallId.isEmpty()) {
                 m_aiService->completeToolCall(m_pendingAiRunTestCallId, toolResultText);
                 m_pendingAiRunTestCallId.clear();
@@ -1174,6 +1292,21 @@ void MainWindow::connectSignals()
         this,
         [this](const ResultPageInfo &resultPageInfo) {
             m_problemPage->appendResultPageInfo(resultPageInfo);
+            writeStartupLog(QString("MainWindow: resultLoaded status=%1 submitId=%2 awaitingAi=%3")
+                                .arg(resultPageInfo.statusText,
+                                     resultPageInfo.submissionId,
+                                     m_pendingAiSubmitAwaitingResult ? "true" : "false"));
+            if (!m_pendingAiSubmitCallId.isEmpty() && m_pendingAiSubmitAwaitingResult) {
+                const QString waitingStatus = resultPageInfo.statusText.trimmed().toLower();
+                if (waitingStatus != "waiting") {
+                    m_aiService->completeToolCall(
+                        m_pendingAiSubmitCallId,
+                        QString("Submit completed.\n%1")
+                            .arg(formatResultPageSummary(resultPageInfo)));
+                    m_pendingAiSubmitCallId.clear();
+                    m_pendingAiSubmitAwaitingResult = false;
+                }
+            }
         });
     connect(
         m_resultService,
@@ -1181,6 +1314,15 @@ void MainWindow::connectSignals()
         this,
         [this](const QString &message) {
             m_problemPage->appendResultFailure(message);
+            writeStartupLog(QString("MainWindow: result load failed %1")
+                                .arg(message.left(200).replace('\n', ' ')));
+            if (!m_pendingAiSubmitCallId.isEmpty() && m_pendingAiSubmitAwaitingResult) {
+                m_aiService->failToolCall(
+                    m_pendingAiSubmitCallId,
+                    QString("Result page load failed.\n%1").arg(message));
+                m_pendingAiSubmitCallId.clear();
+                m_pendingAiSubmitAwaitingResult = false;
+            }
         });
 
     connect(
@@ -1226,13 +1368,22 @@ void MainWindow::connectSignals()
             if (jsonDocument.isObject()) {
                 redirectUrl = jsonDocument.object().value("redirect").toString();
             }
+            writeStartupLog(QString("MainWindow: solutionSubmitted status=%1 redirect=%2 pendingAi=%3")
+                                .arg(QString::number(result.statusCode),
+                                     redirectUrl,
+                                     m_pendingAiSubmitCallId.isEmpty() ? "false" : "true"));
 
             m_problemPage->showSubmitResult(result);
             if (!m_pendingAiSubmitCallId.isEmpty()) {
-                m_aiService->completeToolCall(
-                    m_pendingAiSubmitCallId,
-                    formatSubmitResponse(result));
-                m_pendingAiSubmitCallId.clear();
+                if (!redirectUrl.isEmpty()) {
+                    m_pendingAiSubmitAwaitingResult = true;
+                } else {
+                    m_aiService->completeToolCall(
+                        m_pendingAiSubmitCallId,
+                        formatSubmitResponse(result));
+                    m_pendingAiSubmitCallId.clear();
+                    m_pendingAiSubmitAwaitingResult = false;
+                }
             }
             if (!redirectUrl.isEmpty()) {
                 m_resultService->openResult(QUrl(redirectUrl));
@@ -1249,6 +1400,7 @@ void MainWindow::connectSignals()
                     m_pendingAiSubmitCallId,
                     QString("Submit failed.\n%1").arg(message));
                 m_pendingAiSubmitCallId.clear();
+                m_pendingAiSubmitAwaitingResult = false;
             }
         });
 

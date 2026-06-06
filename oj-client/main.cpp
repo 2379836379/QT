@@ -5,10 +5,32 @@
 #include <QDir>
 #include <QFile>
 #include <QFont>
+#include <QIcon>
 #include <QTextStream>
 
 namespace
 {
+QIcon loadAppIcon()
+{
+    QIcon icon(":/images/icon-page-1.ico");
+    if (!icon.isNull()) {
+        return icon;
+    }
+
+    QDir dir = QDir::current();
+    const QStringList candidates = {
+        dir.filePath("oj-client/images/icon-page-1.ico"),
+        dir.filePath("images/icon-page-1.ico")
+    };
+    for (const QString &path : candidates) {
+        QIcon fileIcon(path);
+        if (!fileIcon.isNull()) {
+            return fileIcon;
+        }
+    }
+    return QIcon();
+}
+
 void writeStartupLog(const QString &message)
 {
     QDir dir = QDir::current();
@@ -30,6 +52,13 @@ int main(int argc, char *argv[])
     writeStartupLog("main: entering");
     QApplication a(argc, argv);
     writeStartupLog("main: QApplication created");
+    QCoreApplication::setApplicationName(" ");
+    QApplication::setApplicationDisplayName(" ");
+    writeStartupLog("main: application name cleared");
+    const QIcon appIcon = loadAppIcon();
+    a.setWindowIcon(appIcon);
+    writeStartupLog(QString("main: application icon set, null=%1")
+                        .arg(appIcon.isNull() ? "true" : "false"));
     a.setFont(QFont("Microsoft YaHei UI", 10));
     writeStartupLog("main: application font set");
     QApplication::setQuitOnLastWindowClosed(false);

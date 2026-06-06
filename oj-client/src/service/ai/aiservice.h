@@ -81,6 +81,7 @@ private:
     QJsonArray buildTools() const;
     QJsonObject makeMessageItem(const QString &role, const QString &text) const;
     void sendRequest();
+    void sendResponseFallback();
     void sendChatCompletionFallback();
     void handleCompletedResponse(const QJsonObject &response);
     void processToolCall(const QJsonObject &callObject);
@@ -108,4 +109,6 @@ private:
     bool m_thinking = false;
     bool m_translationMode = false;
     bool m_translationChatFallbackTried = false;
+    bool m_responseNonStreamFallbackTried = false;
+    bool m_chatCompletionFallbackTried = false;
 };

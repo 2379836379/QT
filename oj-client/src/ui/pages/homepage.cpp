@@ -9,6 +9,7 @@
 #include <QListWidget>
 #include <QListWidgetItem>
 #include <QPushButton>
+#include <QShortcut>
 #include <QUrl>
 #include <QVBoxLayout>
 
@@ -437,6 +438,9 @@ HomePage::HomePage(QWidget *parent)
         Q_UNUSED(this);
     });
     connect(refreshButton, &QPushButton::clicked, this, &HomePage::refreshRequested);
+    auto *refreshShortcut = new QShortcut(QKeySequence(Qt::CTRL | Qt::Key_R), this);
+    refreshShortcut->setContext(Qt::WidgetWithChildrenShortcut);
+    connect(refreshShortcut, &QShortcut::activated, this, &HomePage::refreshRequested);
     connect(
         m_themeButton,
         &QPushButton::clicked,

@@ -8,6 +8,7 @@
 #include <QListWidgetItem>
 #include <QPainter>
 #include <QPushButton>
+#include <QShortcut>
 #include <QStyledItemDelegate>
 #include <QVBoxLayout>
 
@@ -41,12 +42,20 @@ public:
         const QString title = index.data(ProblemTextRole).toString();
         const bool solved = index.data(ProblemSolvedRole).toBool();
         const QString statusText = solved ? QString("finished") : QString();
+        const bool darkMode = opt.widget != nullptr
+            && opt.widget->property("_darkMode").toBool();
 
         QColor titleColor = opt.palette.color(QPalette::Text);
-        QColor statusColor = opt.palette.color(QPalette::Mid);
+        QColor statusColor = solved
+            ? (darkMode ? QColor("#7CFF8A") : QColor("#23C552"))
+            : opt.palette.color(QPalette::Mid);
         if (opt.state & QStyle::State_Selected) {
-            titleColor = opt.palette.color(QPalette::HighlightedText);
-            statusColor = opt.palette.color(QPalette::HighlightedText);
+            titleColor = darkMode ? QColor("#eff8ff") : QColor("#12343b");
+            if (solved) {
+                statusColor = darkMode ? QColor("#9BFF8C") : QColor("#2DD85F");
+            } else {
+                statusColor = titleColor;
+            }
         }
 
         const int statusSpacing = statusText.isEmpty() ? 0 : 16;
@@ -165,6 +174,7 @@ ContestPage::ContestPage(QWidget *parent)
 
     m_problemListWidget = new QListWidget(contentFrame);
     m_problemListWidget->setObjectName("contestProblemList");
+    m_problemListWidget->setProperty("_darkMode", false);
     m_problemListWidget->setMinimumHeight(420);
     m_problemListWidget->setItemDelegate(new ContestProblemDelegate(m_problemListWidget));
 
@@ -277,6 +287,9 @@ ContestPage::ContestPage(QWidget *parent)
         emit themeToggleRequested(!m_darkMode);
     });
     connect(refreshButton, &QPushButton::clicked, this, &ContestPage::refreshRequested);
+    auto *refreshShortcut = new QShortcut(QKeySequence(Qt::CTRL | Qt::Key_R), this);
+    refreshShortcut->setContext(Qt::WidgetWithChildrenShortcut);
+    connect(refreshShortcut, &QShortcut::activated, this, &ContestPage::refreshRequested);
     connect(m_backToolButton, &QPushButton::clicked, this, &ContestPage::backRequested);
     connect(m_collapsedBackButton, &QPushButton::clicked, this, &ContestPage::backRequested);
     connect(
@@ -354,6 +367,9 @@ void ContestPage::showProblems(const ContestPageInfo &contestPageInfo)
 void ContestPage::setDarkMode(bool dark)
 {
     m_darkMode = dark;
+    if (m_problemListWidget != nullptr) {
+        m_problemListWidget->setProperty("_darkMode", dark);
+    }
     QString lightStyle = property("_lightStyleSheet").toString();
     if (lightStyle.isEmpty()) {
         lightStyle = styleSheet();

@@ -5,13 +5,14 @@
 #include "parser/resultparser.h"
 #include "parser/submitparser.h"
 
+#include <QHash>
 #include <QWidget>
 
 class QComboBox;
 class QLabel;
+class QObject;
 class QPlainTextEdit;
 class QPushButton;
-class QSyntaxHighlighter;
 class QTextEdit;
 class QListWidget;
 class QListWidgetItem;
@@ -85,7 +86,6 @@ signals:
     void backRequested();
     void homeRequested();
     void themeToggleRequested(bool dark);
-    void refreshRequested();
     void translateProblemRequested();
     void favoriteRequested();
     void aiAskRequested(const QString &question);
@@ -95,6 +95,8 @@ signals:
     void submitRequested(const QString &language, const QString &sourceText);
 
 private:
+    void saveCurrentDraft();
+    void restoreDraftOrStarterCode(const ProblemPageInfo &problemPageInfo);
     void setToolsExpanded(bool expanded);
     void setAiPanelVisible(bool visible);
     void setResultTab(bool showTestTab);
@@ -123,7 +125,7 @@ private:
     QPushButton *m_showOriginalButton = nullptr;
     QPushButton *m_translateButton = nullptr;
     QTextEdit *m_aiResponseTextEdit = nullptr;
-    QSyntaxHighlighter *m_codeHighlighter = nullptr;
+    QObject *m_codeHighlighter = nullptr;
     QComboBox *m_languageComboBox = nullptr;
     QPlainTextEdit *m_codeEdit = nullptr;
     QPushButton *m_submitButton = nullptr;
@@ -155,4 +157,7 @@ private:
     bool m_hasProblemTranslation = false;
     bool m_problemTranslationLoading = false;
     bool m_showingOriginalProblem = false;
+    QString m_currentProblemUrl;
+    QHash<QString, QString> m_codeDraftByProblemUrl;
+    QHash<QString, QString> m_languageDraftByProblemUrl;
 };

@@ -1,13 +1,36 @@
 #include "network/openaiclient.h"
 
+#include <QCoreApplication>
+#include <QDateTime>
+#include <QDir>
+#include <QFile>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QNetworkReply>
 #include <QNetworkRequest>
+#include <QTextStream>
 #include <memory>
 
 namespace
 {
+void writeOpenAiLog(const QString &message)
+{
+    QDir dir(QCoreApplication::applicationDirPath());
+    if (dir.dirName().compare("build", Qt::CaseInsensitive) == 0) {
+        dir.cdUp();
+    }
+    dir.mkpath("data");
+
+    QFile file(dir.filePath("data/startup.log"));
+    if (!file.open(QIODevice::Append | QIODevice::Text)) {
+        return;
+    }
+
+    QTextStream stream(&file);
+    stream << QDateTime::currentDateTime().toString("yyyy-MM-dd HH:mm:ss.zzz")
+           << " | " << message << '\n';
+}
+
 struct StreamState
 {
     QByteArray buffer;
@@ -125,6 +148,8 @@ bool processEventBlock(const QByteArray &block,
     if (eventName == "response.output_text.delta") {
         const QString delta = object.value("delta").toString();
         if (!delta.isEmpty()) {
+            writeOpenAiLog(QString("OpenAiClient: stream delta len=%1")
+                               .arg(QString::number(delta.size())));
             emit client->responseDelta(delta);
         }
         return false;
@@ -132,6 +157,7 @@ bool processEventBlock(const QByteArray &block,
 
     if (eventName == "response.completed" || eventName == "response.done") {
         state->completed = true;
+        writeOpenAiLog(QString("OpenAiClient: stream completed event=%1").arg(eventName));
         emit client->responseCompleted(object);
         return true;
     }
@@ -156,6 +182,7 @@ void OpenAiClient::createResponseStream(const QString &apiKey,
                                         const QJsonObject &payload)
 {
     QUrl url = responsesUrl(m_baseUrl);
+    writeOpenAiLog(QString("OpenAiClient::createResponseStream %1").arg(url.toString()));
     QNetworkRequest request(url);
     request.setTransferTimeout(30000);
     request.setHeader(QNetworkRequest::ContentTypeHeader,
@@ -193,6 +220,11 @@ void OpenAiClient::createResponseStream(const QString &apiKey,
 
     connect(reply, &QNetworkReply::finished, this, [this, reply, state]() {
         const QByteArray body = reply->readAll();
+        writeOpenAiLog(QString("OpenAiClient::createResponseStream finished error=%1 status=%2")
+                           .arg(QString::number(reply->error()),
+                                QString::number(reply->attribute(
+                                                     QNetworkRequest::HttpStatusCodeAttribute)
+                                                     .toInt())));
         if (reply->error() != QNetworkReply::NoError) {
             QString message =
                 QString("OpenAI request failed.\nHTTP status: %1\nEndpoint: %2\n%3")
@@ -237,6 +269,7 @@ void OpenAiClient::createResponseStream(const QString &apiKey,
             const QJsonDocument document = QJsonDocument::fromJson(candidateBody);
             if (document.isObject()) {
                 state->completed = true;
+                writeOpenAiLog("OpenAiClient::createResponseStream fallback completed from body");
                 emit responseCompleted(document.object());
             } else if (!state->sawStreamEvent) {
                 QString message =
@@ -256,6 +289,7 @@ void OpenAiClient::createResponseStream(const QString &apiKey,
 void OpenAiClient::createResponse(const QString &apiKey, const QJsonObject &payload)
 {
     QUrl url = responsesUrl(m_baseUrl);
+    writeOpenAiLog(QString("OpenAiClient::createResponse %1").arg(url.toString()));
     QNetworkRequest request(url);
     request.setTransferTimeout(30000);
     request.setHeader(QNetworkRequest::ContentTypeHeader,
@@ -273,6 +307,11 @@ void OpenAiClient::createResponse(const QString &apiKey, const QJsonObject &payl
 
     connect(reply, &QNetworkReply::finished, this, [this, reply]() {
         const QByteArray body = reply->readAll();
+        writeOpenAiLog(QString("OpenAiClient::createResponse finished error=%1 status=%2")
+                           .arg(QString::number(reply->error()),
+                                QString::number(reply->attribute(
+                                                     QNetworkRequest::HttpStatusCodeAttribute)
+                                                     .toInt())));
         if (reply->error() != QNetworkReply::NoError) {
             QString message =
                 QString("OpenAI request failed.\nHTTP status: %1\nEndpoint: %2\n%3")
@@ -322,6 +361,7 @@ void OpenAiClient::createChatCompletion(const QString &apiKey,
                                         const QJsonObject &payload)
 {
     QUrl url = chatCompletionsUrl(m_baseUrl);
+    writeOpenAiLog(QString("OpenAiClient::createChatCompletion %1").arg(url.toString()));
     QNetworkRequest request(url);
     request.setTransferTimeout(30000);
     request.setHeader(QNetworkRequest::ContentTypeHeader,
@@ -336,6 +376,11 @@ void OpenAiClient::createChatCompletion(const QString &apiKey,
 
     connect(reply, &QNetworkReply::finished, this, [this, reply]() {
         const QByteArray body = reply->readAll();
+        writeOpenAiLog(QString("OpenAiClient::createChatCompletion finished error=%1 status=%2")
+                           .arg(QString::number(reply->error()),
+                                QString::number(reply->attribute(
+                                                     QNetworkRequest::HttpStatusCodeAttribute)
+                                                     .toInt())));
         if (reply->error() != QNetworkReply::NoError) {
             QString message =
                 QString("OpenAI request failed.\nHTTP status: %1\nEndpoint: %2\n%3")

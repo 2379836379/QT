@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.19)
-project(oj LANGUAGES CXX)
+project(oj LANGUAGES C CXX)
 
 find_package(Qt6 6.5 REQUIRED COMPONENTS Core Widgets Network Sql Multimedia)
 
@@ -8,11 +8,15 @@ qt_standard_project_setup()
 qt_add_executable(oj
     MACOSX_BUNDLE
     main.cpp
+    resources.qrc
+    app_icon.rc
     src/ui/mainwindow.cpp
     src/ui/mainwindow.h
     src/ui/mainwindow.ui
     src/ui/lightmodeiconhelper.cpp
     src/ui/lightmodeiconhelper.h
+    src/ui/treesittersyntaxhighlighter.cpp
+    src/ui/treesittersyntaxhighlighter.h
     src/ui/pages/loginpage.cpp
     src/ui/pages/loginpage.h
     src/ui/pages/aiconfigpage.cpp
@@ -107,11 +111,20 @@ qt_add_executable(oj
     src/service/login/logincacheservice.h
     src/service/login/loginservice.cpp
     src/service/login/loginservice.h
+    third_party/tree-sitter/lib/src/lib.c
+    third_party/tree-sitter-cpp/src/parser.c
+    third_party/tree-sitter-cpp/src/scanner.c
+    third_party/tree-sitter-python/src/parser.c
+    third_party/tree-sitter-python/src/scanner.c
 )
 
 target_include_directories(oj
     PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/src
+        ${CMAKE_CURRENT_SOURCE_DIR}/third_party/tree-sitter/lib/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/third_party/tree-sitter/lib/src
+        ${CMAKE_CURRENT_SOURCE_DIR}/third_party/tree-sitter-cpp/src
+        ${CMAKE_CURRENT_SOURCE_DIR}/third_party/tree-sitter-python/src
 )
 
 target_link_libraries(oj

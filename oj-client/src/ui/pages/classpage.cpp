@@ -7,6 +7,7 @@
 #include <QListWidget>
 #include <QListWidgetItem>
 #include <QPushButton>
+#include <QShortcut>
 #include <QVBoxLayout>
 
 ClassPage::ClassPage(QWidget *parent)
@@ -198,6 +199,9 @@ ClassPage::ClassPage(QWidget *parent)
         emit themeToggleRequested(!m_darkMode);
     });
     connect(refreshButton, &QPushButton::clicked, this, &ClassPage::refreshRequested);
+    auto *refreshShortcut = new QShortcut(QKeySequence(Qt::CTRL | Qt::Key_R), this);
+    refreshShortcut->setContext(Qt::WidgetWithChildrenShortcut);
+    connect(refreshShortcut, &QShortcut::activated, this, &ClassPage::refreshRequested);
     connect(m_backToolButton, &QPushButton::clicked, this, &ClassPage::backRequested);
     connect(m_collapsedBackButton, &QPushButton::clicked, this, &ClassPage::backRequested);
     connect(

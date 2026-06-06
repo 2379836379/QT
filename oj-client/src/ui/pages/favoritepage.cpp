@@ -8,6 +8,7 @@
 #include <QListWidget>
 #include <QListWidgetItem>
 #include <QPushButton>
+#include <QShortcut>
 #include <QVBoxLayout>
 
 FavoritePage::FavoritePage(QWidget *parent)
@@ -255,6 +256,9 @@ FavoritePage::FavoritePage(QWidget *parent)
             setToolsExpanded(!m_toolsExpanded);
         });
     connect(refreshButton, &QPushButton::clicked, this, &FavoritePage::refreshRequested);
+    auto *refreshShortcut = new QShortcut(QKeySequence(Qt::CTRL | Qt::Key_R), this);
+    refreshShortcut->setContext(Qt::WidgetWithChildrenShortcut);
+    connect(refreshShortcut, &QShortcut::activated, this, &FavoritePage::refreshRequested);
     connect(
         m_newFolderButton,
         &QPushButton::clicked,

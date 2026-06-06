@@ -1,5 +1,6 @@
 #include "ui/pages/problempage.h"
 #include "ui/lightmodeiconhelper.h"
+#include "ui/treesittersyntaxhighlighter.h"
 
 #include <QComboBox>
 #include <QCoreApplication>
@@ -17,11 +18,10 @@
 #include <QRect>
 #include <QRegularExpression>
 #include <QKeyEvent>
+#include <QShortcut>
 #include <QSignalBlocker>
 #include <QSplitter>
 #include <QStackedWidget>
-#include <QSyntaxHighlighter>
-#include <QTextCharFormat>
 #include <QTextEdit>
 #include <QTextBlock>
 #include <QTextStream>
@@ -31,6 +31,47 @@
 namespace
 {
 bool g_problemPageDarkMode = false;
+
+QString renderAiTranscriptMarkdown(const QString &transcript)
+{
+    if (transcript.trimmed().isEmpty()) {
+        return QString();
+    }
+
+    static const QRegularExpression blockStartRegex(
+        QStringLiteral("(?m)^(User|Assistant)\\n"));
+    QRegularExpressionMatchIterator iterator = blockStartRegex.globalMatch(transcript);
+
+    QList<QRegularExpressionMatch> matches;
+    while (iterator.hasNext()) {
+        matches.append(iterator.next());
+    }
+
+    if (matches.isEmpty()) {
+        return transcript;
+    }
+
+    QStringList sections;
+    for (int i = 0; i < matches.size(); ++i) {
+        const QRegularExpressionMatch &match = matches.at(i);
+        const QString title = match.captured(1);
+        const int bodyStart = match.capturedEnd(0);
+        const int bodyEnd = (i + 1 < matches.size()) ? matches.at(i + 1).capturedStart(0)
+                                                     : transcript.size();
+        QString body = transcript.mid(bodyStart, bodyEnd - bodyStart);
+        while (body.endsWith("\n\n")) {
+            body.chop(2);
+        }
+
+        if (title == "User") {
+            sections << QString("### User\n\n```text\n%1\n```").arg(body);
+        } else {
+            sections << QString("### Assistant\n\n%1").arg(body);
+        }
+    }
+
+    return sections.join("\n\n");
+}
 
 void writeStartupLog(const QString &message)
 {
@@ -164,8 +205,9 @@ protected:
             if (trimmedBeforeCursor.endsWith('{')) {
                 const QString innerIndent = indent + indentUnit(indent);
                 cursor.insertText("\n" + innerIndent + "\n" + indent);
-                cursor.movePosition(QTextCursor::Up);
-                cursor.movePosition(QTextCursor::EndOfLine);
+                if (cursor.movePosition(QTextCursor::Up)) {
+                    cursor.movePosition(QTextCursor::EndOfLine);
+                }
                 setTextCursor(cursor);
                 return;
             }
@@ -201,10 +243,11 @@ protected:
             if (isClosingChar(input)) {
                 QTextCursor cursor = textCursor();
                 if (!cursor.hasSelection()) {
-                    cursor.movePosition(QTextCursor::Right,
-                                        QTextCursor::KeepAnchor,
-                                        1);
-                    if (cursor.selectedText() == QString(input)) {
+                    if (cursor.position() < document()->characterCount() - 1
+                        && cursor.movePosition(QTextCursor::Right,
+                                               QTextCursor::KeepAnchor,
+                                               1)
+                        && cursor.selectedText() == QString(input)) {
                         cursor.clearSelection();
                         setTextCursor(cursor);
                         return;
@@ -276,205 +319,6 @@ private:
     }
 
     QWidget *m_lineNumberArea = nullptr;
-};
-
-class CodeSyntaxHighlighter final : public QSyntaxHighlighter
-{
-public:
-    enum class LanguageMode
-    {
-        PlainText,
-        Cpp,
-        Python
-    };
-
-    explicit CodeSyntaxHighlighter(QTextDocument *parent = nullptr)
-        : QSyntaxHighlighter(parent)
-    {
-        setLanguageMode(LanguageMode::Cpp);
-    }
-
-    void setLanguageMode(LanguageMode mode)
-    {
-        if (m_languageMode == mode) {
-            return;
-        }
-        m_languageMode = mode;
-        m_rules.clear();
-        m_commentStart = QRegularExpression();
-        m_commentEnd = QRegularExpression();
-        m_multiLineCommentFormat = QTextCharFormat();
-
-        if (mode == LanguageMode::Cpp) {
-            configureCppRules();
-        } else if (mode == LanguageMode::Python) {
-            configurePythonRules();
-        }
-
-        rehighlight();
-    }
-
-protected:
-    void highlightBlock(const QString &text) override
-    {
-        for (const HighlightRule &rule : m_rules) {
-            QRegularExpressionMatchIterator iterator = rule.pattern.globalMatch(text);
-            while (iterator.hasNext()) {
-                const QRegularExpressionMatch match = iterator.next();
-                setFormat(match.capturedStart(), match.capturedLength(), rule.format);
-            }
-        }
-
-        if (!m_commentStart.isValid() || !m_commentEnd.isValid()) {
-            setCurrentBlockState(0);
-            return;
-        }
-
-        setCurrentBlockState(0);
-
-        int startIndex = previousBlockState() == 1 ? 0 : text.indexOf(m_commentStart);
-        while (startIndex >= 0) {
-            const QRegularExpressionMatch endMatch =
-                m_commentEnd.match(text, startIndex);
-            int endIndex = endMatch.capturedStart();
-            int commentLength = 0;
-            if (endIndex < 0) {
-                setCurrentBlockState(1);
-                commentLength = text.size() - startIndex;
-            } else {
-                commentLength = endIndex - startIndex + endMatch.capturedLength();
-            }
-
-            setFormat(startIndex, commentLength, m_multiLineCommentFormat);
-            startIndex = text.indexOf(m_commentStart, startIndex + commentLength);
-        }
-    }
-
-private:
-    struct HighlightRule
-    {
-        QRegularExpression pattern;
-        QTextCharFormat format;
-    };
-
-    void configureCppRules()
-    {
-        QTextCharFormat keywordFormat;
-        keywordFormat.setForeground(QColor("#0b57d0"));
-        keywordFormat.setFontWeight(QFont::Bold);
-        addKeywordRules(
-            {"alignas",    "alignof",     "asm",       "auto",      "bool",
-             "break",      "case",        "catch",     "char",      "char8_t",
-             "char16_t",   "char32_t",    "class",     "concept",   "const",
-             "consteval",  "constexpr",   "constinit", "const_cast","continue",
-             "co_await",   "co_return",   "co_yield",  "decltype",  "default",
-             "delete",     "do",          "double",    "dynamic_cast",
-             "else",       "enum",        "explicit",  "export",    "extern",
-             "false",      "float",       "for",       "friend",    "goto",
-             "if",         "inline",      "int",       "long",      "mutable",
-             "namespace",  "new",         "noexcept",  "nullptr",   "operator",
-             "private",    "protected",   "public",    "register",  "reinterpret_cast",
-             "requires",   "return",      "short",     "signed",    "sizeof",
-             "static",     "static_assert","static_cast","struct",  "switch",
-             "template",   "this",        "thread_local","throw",   "true",
-             "try",        "typedef",     "typeid",    "typename",  "union",
-             "unsigned",   "using",       "virtual",   "void",      "volatile",
-             "wchar_t",    "while"},
-            keywordFormat);
-
-        QTextCharFormat typeFormat;
-        typeFormat.setForeground(QColor("#6f42c1"));
-        addRule(QStringLiteral("\\b(std|string|vector|map|set|unordered_map|unordered_set|pair|tuple|queue|stack|deque|priority_queue)\\b"),
-                typeFormat);
-
-        QTextCharFormat preprocessorFormat;
-        preprocessorFormat.setForeground(QColor("#9a6700"));
-        addRule(QStringLiteral("^\\s*#[^\\n]*"), preprocessorFormat);
-
-        QTextCharFormat stringFormat;
-        stringFormat.setForeground(QColor("#0a7f2e"));
-        addRule(QStringLiteral(R"("(\\.|[^"\\])*")"), stringFormat);
-        addRule(QStringLiteral(R"('(\\.|[^'\\])*')"), stringFormat);
-
-        QTextCharFormat numberFormat;
-        numberFormat.setForeground(QColor("#116329"));
-        addRule(QStringLiteral(R"(\b\d+([uUlLfF]|ll|LL)?\b)"), numberFormat);
-        addRule(QStringLiteral(R"(\b\d+\.\d+([eE][+-]?\d+)?[fFlL]?\b)"), numberFormat);
-        addRule(QStringLiteral(R"(\b0[xX][0-9a-fA-F]+([uUlL]|ll|LL)?\b)"), numberFormat);
-
-        QTextCharFormat functionFormat;
-        functionFormat.setForeground(QColor("#005cc5"));
-        addRule(QStringLiteral(R"(\b[A-Za-z_]\w*(?=\s*\())"), functionFormat);
-
-        QTextCharFormat singleLineCommentFormat;
-        singleLineCommentFormat.setForeground(QColor("#6a737d"));
-        addRule(QStringLiteral(R"(//[^\n]*)"), singleLineCommentFormat);
-        m_multiLineCommentFormat = singleLineCommentFormat;
-        m_commentStart = QRegularExpression(QStringLiteral(R"(/\*)"));
-        m_commentEnd = QRegularExpression(QStringLiteral(R"(\*/)"));
-    }
-
-    void configurePythonRules()
-    {
-        QTextCharFormat keywordFormat;
-        keywordFormat.setForeground(QColor("#0b57d0"));
-        keywordFormat.setFontWeight(QFont::Bold);
-        addKeywordRules(
-            {"False", "None", "True", "and", "as", "assert", "async", "await",
-             "break", "class", "continue", "def", "del", "elif", "else",
-             "except", "finally", "for", "from", "global", "if", "import",
-             "in", "is", "lambda", "nonlocal", "not", "or", "pass", "raise",
-             "return", "try", "while", "with", "yield"},
-            keywordFormat);
-
-        QTextCharFormat builtinFormat;
-        builtinFormat.setForeground(QColor("#6f42c1"));
-        addRule(QStringLiteral("\\b(int|float|str|list|dict|set|tuple|bool|len|range|print|input|enumerate|zip|map|filter|sum|min|max|abs|sorted)\\b"),
-                builtinFormat);
-
-        QTextCharFormat decoratorFormat;
-        decoratorFormat.setForeground(QColor("#9a6700"));
-        addRule(QStringLiteral(R"(@[A-Za-z_]\w*)"), decoratorFormat);
-
-        QTextCharFormat stringFormat;
-        stringFormat.setForeground(QColor("#0a7f2e"));
-        addRule(QStringLiteral(R"("(\\.|[^"\\])*")"), stringFormat);
-        addRule(QStringLiteral(R"('(\\.|[^'\\])*')"), stringFormat);
-        addRule(QStringLiteral(R"("""[\s\S]*?""")"), stringFormat);
-        addRule(QStringLiteral(R"('''[\s\S]*?''')"), stringFormat);
-
-        QTextCharFormat numberFormat;
-        numberFormat.setForeground(QColor("#116329"));
-        addRule(QStringLiteral(R"(\b\d+(\.\d+)?([eE][+-]?\d+)?\b)"), numberFormat);
-
-        QTextCharFormat functionFormat;
-        functionFormat.setForeground(QColor("#005cc5"));
-        addRule(QStringLiteral(R"(\b[A-Za-z_]\w*(?=\s*\())"), functionFormat);
-
-        QTextCharFormat commentFormat;
-        commentFormat.setForeground(QColor("#6a737d"));
-        addRule(QStringLiteral(R"(#[^\n]*)"), commentFormat);
-    }
-
-    void addRule(const QString &pattern, const QTextCharFormat &format)
-    {
-        m_rules.push_back({QRegularExpression(pattern), format});
-    }
-
-    void addKeywordRules(const QStringList &keywords, const QTextCharFormat &format)
-    {
-        for (const QString &keyword : keywords) {
-            addRule(QStringLiteral("\\b") + QRegularExpression::escape(keyword)
-                        + QStringLiteral("\\b"),
-                    format);
-        }
-    }
-
-    QVector<HighlightRule> m_rules;
-    LanguageMode m_languageMode = LanguageMode::PlainText;
-    QTextCharFormat m_multiLineCommentFormat;
-    QRegularExpression m_commentStart;
-    QRegularExpression m_commentEnd;
 };
 
 LineNumberArea::LineNumberArea(IdeCodeEditor *editor)
@@ -630,68 +474,48 @@ QString formatSubmitResult(const NetworkResult &result)
 {
     const QString bodyText = QString::fromUtf8(result.body);
     const QString responseType = classifySubmitResponse(result, bodyText);
-    const QString pageTitle =
-        extractFirstMatch(bodyText, "<title[^>]*>(.*?)</title>");
-    QString mainHeading = extractFirstMatch(bodyText, "<h1[^>]*>(.*?)</h1>");
-    if (mainHeading.isEmpty()) {
-        mainHeading = extractFirstMatch(bodyText, "<h2[^>]*>(.*?)</h2>");
+    QString statusText;
+    if (result.ok && result.statusCode >= 200 && result.statusCode < 400) {
+        if (responseType == "result-page") {
+            statusText = "Submitted";
+        } else if (responseType == "submit-page") {
+            statusText = "Submit failed";
+        } else {
+            statusText = "Submit response received";
+        }
+    } else {
+        statusText = "Submit failed";
     }
 
-    QString preview = bodyText;
-    preview.replace("\r\n", "\n");
-    preview.replace('\r', '\n');
-    if (preview.size() > 1200) {
-        preview = preview.left(1200) + "\n...[truncated]";
+    QString errorText;
+    if (!result.ok) {
+        errorText = result.errorString.trimmed();
+    }
+    if (errorText.isEmpty() && result.statusCode >= 400) {
+        errorText = bodyText.trimmed();
+    }
+    if (errorText.size() > 800) {
+        errorText = errorText.left(800) + "\n...[truncated]";
     }
 
-    return QString(
-               "Submit Result\n"
-               "HTTP status: %1\n"
-               "Network OK: %2\n"
-               "Request URL: %3\n"
-               "Final URL: %4\n"
-               "Response type: %5\n"
-               "Page title: %6\n"
-               "Main heading: %7\n"
-               "Body bytes: %8\n\n"
-               "Preview:\n%9")
-        .arg(QString::number(result.statusCode),
-             result.ok ? "true" : "false",
-             result.requestUrl.toString(),
-             result.finalUrl.toString(),
-             responseType,
-             pageTitle.isEmpty() ? "<none>" : pageTitle,
-             mainHeading.isEmpty() ? "<none>" : mainHeading,
-             QString::number(result.body.size()),
-             preview);
+    QString text = QString("Submit Status: %1").arg(statusText);
+    if (!errorText.isEmpty()) {
+        text += "\n\nError:\n" + errorText;
+    }
+    return text;
 }
 
 QString formatResultPageInfo(const ResultPageInfo &resultPageInfo)
 {
-    QString text = QString(
-                       "Parsed Result Page\n"
-                       "Submission ID: %1\n"
-                       "Status: %2\n"
-                       "Status class: %3\n"
-                       "Solution URL: %4")
-                       .arg(resultPageInfo.submissionId.isEmpty()
+    QString text = QString("Judge Status: %1")
+                       .arg(resultPageInfo.statusText.isEmpty()
                                 ? "<none>"
-                                : resultPageInfo.submissionId,
-                            resultPageInfo.statusText.isEmpty()
-                                ? "<none>"
-                                : resultPageInfo.statusText,
-                            resultPageInfo.statusClass.isEmpty()
-                                ? "<none>"
-                                : resultPageInfo.statusClass,
-                            resultPageInfo.solutionUrl.isEmpty()
-                                ? "<none>"
-                                : resultPageInfo.solutionUrl);
+                                : resultPageInfo.statusText);
+    if (!resultPageInfo.detailTitle.isEmpty()) {
+        text += "\n\n" + resultPageInfo.detailTitle;
+    }
     if (!resultPageInfo.detailText.isEmpty()) {
-        text += QString("\n\n%1\n%2")
-                    .arg(resultPageInfo.detailTitle.isEmpty()
-                             ? QString("Detail")
-                             : resultPageInfo.detailTitle,
-                         resultPageInfo.detailText);
+        text += "\n" + resultPageInfo.detailText;
     }
     return text;
 }
@@ -720,13 +544,10 @@ ProblemPage::ProblemPage(QWidget *parent)
     themeButton->setObjectName("problemTopActionButton");
     m_translateButton = new QPushButton("Translate", topFrame);
     m_translateButton->setObjectName("problemRefreshButton");
-    auto *refreshButton = new QPushButton("Refresh", topFrame);
-    refreshButton->setObjectName("problemTopActionButton");
 
     topLayout->addWidget(m_titleLabel, 1);
     topLayout->addWidget(homeButton, 0, Qt::AlignRight);
     topLayout->addWidget(themeButton, 0, Qt::AlignRight);
-    topLayout->addWidget(refreshButton, 0, Qt::AlignRight);
     writeStartupLog("ProblemPage: top frame complete");
 
     auto *bottomLayout = new QHBoxLayout();
@@ -827,7 +648,7 @@ ProblemPage::ProblemPage(QWidget *parent)
     m_codeEdit->setMinimumHeight(180);
     m_codeEdit->setTabStopDistance(
         m_codeEdit->fontMetrics().horizontalAdvance(QLatin1Char(' ')) * 4);
-    m_codeHighlighter = new CodeSyntaxHighlighter(m_codeEdit->document());
+    m_codeHighlighter = new TreeSitterSyntaxHighlighter(m_codeEdit->document());
     writeStartupLog("ProblemPage: code editor complete");
     auto *resultTabLayout = new QHBoxLayout();
     resultTabLayout->setContentsMargins(0, 0, 0, 0);
@@ -963,14 +784,12 @@ ProblemPage::ProblemPage(QWidget *parent)
 
     homeButton->setToolTip("Home");
     themeButton->setToolTip("Dark Mode");
-    refreshButton->setToolTip("Refresh");
     m_backToolButton->setToolTip("Back");
     m_favoriteToolButton->setToolTip("Favorite Current Problem");
     m_collapsedBackButton->setToolTip("Back");
     m_collapsedFavoriteButton->setToolTip("Favorite Current Problem");
     LightModeIconHelper::applyIcon(homeButton, "homepage.svg");
     LightModeIconHelper::applyIcon(themeButton, "dark-mode.png");
-    LightModeIconHelper::applyIcon(refreshButton, "refresh.svg");
     LightModeIconHelper::applyIcon(m_collapsedBackButton, "back.svg");
     LightModeIconHelper::applyIcon(m_collapsedFavoriteButton, "favorite.png");
     writeStartupLog("ProblemPage: layout assembly complete");
@@ -1159,7 +978,6 @@ ProblemPage::ProblemPage(QWidget *parent)
     connect(m_showOriginalButton, &QPushButton::clicked, this, [this]() {
         showOriginalProblemText();
     });
-    connect(refreshButton, &QPushButton::clicked, this, &ProblemPage::refreshRequested);
     connect(m_backToolButton, &QPushButton::clicked, this, &ProblemPage::backRequested);
     connect(m_collapsedBackButton, &QPushButton::clicked, this, &ProblemPage::backRequested);
     connect(m_favoriteToolButton, &QPushButton::clicked, this, &ProblemPage::favoriteRequested);
@@ -1175,6 +993,10 @@ ProblemPage::ProblemPage(QWidget *parent)
         &QComboBox::currentIndexChanged,
         this,
         [this](int) {
+            if (!m_currentProblemUrl.isEmpty()) {
+                m_languageDraftByProblemUrl.insert(m_currentProblemUrl,
+                                                   currentLanguageValue());
+            }
             updateCodeHighlightLanguage();
         });
     connect(
@@ -1322,6 +1144,8 @@ void ProblemPage::setResultTab(bool showTestTab)
 void ProblemPage::openProblem(const QString &problemTitle)
 {
     writeStartupLog("ProblemPage::openProblem begin");
+    saveCurrentDraft();
+    m_currentProblemUrl.clear();
     m_hasDisplayedProblemInfo = false;
     m_displayedProblemInfo = ProblemPageInfo{};
     m_translatedDescription.clear();
@@ -1338,8 +1162,6 @@ void ProblemPage::openProblem(const QString &problemTitle)
     writeStartupLog("ProblemPage::openProblem detail placeholder set");
     resetSubmitPanel();
     writeStartupLog("ProblemPage::openProblem resetSubmitPanel done");
-    setSourceCodeText(QString());
-    writeStartupLog("ProblemPage::openProblem source cleared");
     m_aiTranscript.clear();
     writeStartupLog("ProblemPage::openProblem transcript cleared");
     m_aiResponseBuffer.clear();
@@ -1355,6 +1177,7 @@ void ProblemPage::openProblem(const QString &problemTitle)
 
 void ProblemPage::showProblemLoadedFromFavorites(const ProblemPageInfo &problemPageInfo)
 {
+    m_currentProblemUrl = problemPageInfo.problemUrl;
     m_displayedProblemInfo = problemPageInfo;
     m_hasDisplayedProblemInfo = true;
     m_translatedDescription.clear();
@@ -1373,6 +1196,7 @@ void ProblemPage::showProblemLoadedFromFavorites(const ProblemPageInfo &problemP
 
 void ProblemPage::showProblem(const ProblemPageInfo &problemPageInfo)
 {
+    m_currentProblemUrl = problemPageInfo.problemUrl;
     m_displayedProblemInfo = problemPageInfo;
     m_hasDisplayedProblemInfo = true;
     m_translatedDescription.clear();
@@ -1401,8 +1225,7 @@ void ProblemPage::openSubmit(const ProblemPageInfo &problemPageInfo)
     writeStartupLog("ProblemPage::openSubmit begin");
     resetSubmitPanel();
     writeStartupLog("ProblemPage::openSubmit resetSubmitPanel done");
-    Q_UNUSED(problemPageInfo);
-    writeStartupLog("ProblemPage::openSubmit starter code skipped");
+    restoreDraftOrStarterCode(problemPageInfo);
 }
 
 void ProblemPage::showLoadingSubmitOptions(bool loading)
@@ -1421,11 +1244,29 @@ void ProblemPage::showSubmitPageLoaded(const SubmitPageInfo &submitPageInfo,
     }
     writeStartupLog("ProblemPage::showSubmitPageLoaded languages filled");
 
-    const int index = m_languageComboBox->findData(defaultLanguage);
+    QString preferredLanguage = defaultLanguage;
+    if (!m_currentProblemUrl.isEmpty()) {
+        const QString cachedLanguage =
+            m_languageDraftByProblemUrl.value(m_currentProblemUrl);
+        if (!cachedLanguage.isEmpty()) {
+            preferredLanguage = cachedLanguage;
+        }
+    }
+
+    const int index = m_languageComboBox->findData(preferredLanguage);
     if (index >= 0) {
         m_languageComboBox->setCurrentIndex(index);
+    } else {
+        const int defaultIndex = m_languageComboBox->findData(defaultLanguage);
+        if (defaultIndex >= 0) {
+            m_languageComboBox->setCurrentIndex(defaultIndex);
+        }
     }
     writeStartupLog("ProblemPage::showSubmitPageLoaded default language selected");
+
+    if (!m_currentProblemUrl.isEmpty() && !currentLanguageValue().isEmpty()) {
+        m_languageDraftByProblemUrl.insert(m_currentProblemUrl, currentLanguageValue());
+    }
 
     const bool hasLanguages = m_languageComboBox->count() > 0;
     m_languageComboBox->setEnabled(hasLanguages);
@@ -1489,17 +1330,14 @@ void ProblemPage::showSubmitPayloadBuilt(const QString &languageValue,
         m_codeEdit->toPlainText(),
         payload);
     setResultTab(false);
-    m_submitResultTextEdit->setPlainText(m_lastSubmitPreview);
+    m_submitResultTextEdit->setPlainText("Submitting...");
 }
 
 void ProblemPage::showSubmitResult(const NetworkResult &result)
 {
     const QString resultText = formatSubmitResult(result);
     setResultTab(false);
-    m_submitResultTextEdit->setPlainText(
-        m_lastSubmitPreview.isEmpty()
-            ? resultText
-            : m_lastSubmitPreview + "\n\n" + resultText);
+    m_submitResultTextEdit->setPlainText(resultText);
 }
 
 void ProblemPage::showSubmitFailed(const QString &message)
@@ -1524,8 +1362,11 @@ void ProblemPage::showAiThinking(bool thinking)
     }
     if (thinking) {
         m_aiResponseBuffer.clear();
-        appendAiTranscriptBlock("Assistant", "Waiting for OpenAI response...");
-        refreshAiResponseView();
+        const QString waitingBlock = "Assistant\nWaiting for OpenAI response...";
+        if (!m_aiTranscript.endsWith(waitingBlock)) {
+            appendAiTranscriptBlock("Assistant", "Waiting for OpenAI response...");
+            refreshAiResponseView();
+        }
     }
 }
 
@@ -1680,6 +1521,9 @@ void ProblemPage::setSourceCodeText(const QString &text)
     if (m_codeEdit != nullptr) {
         m_codeEdit->setPlainText(text);
     }
+    if (!m_currentProblemUrl.isEmpty()) {
+        m_codeDraftByProblemUrl.insert(m_currentProblemUrl, text);
+    }
 }
 
 void ProblemPage::setTestInputText(const QString &text)
@@ -1807,9 +1651,36 @@ void ProblemPage::resetSubmitPanel()
     writeStartupLog("ProblemPage::resetSubmitPanel end");
 }
 
+void ProblemPage::saveCurrentDraft()
+{
+    if (m_currentProblemUrl.isEmpty() || m_codeEdit == nullptr) {
+        return;
+    }
+    m_codeDraftByProblemUrl.insert(m_currentProblemUrl, m_codeEdit->toPlainText());
+}
+
+void ProblemPage::restoreDraftOrStarterCode(const ProblemPageInfo &problemPageInfo)
+{
+    const QString key = problemPageInfo.problemUrl;
+    if (!key.isEmpty() && m_codeDraftByProblemUrl.contains(key)) {
+        setSourceCodeText(m_codeDraftByProblemUrl.value(key));
+        writeStartupLog("ProblemPage::openSubmit draft restored");
+        return;
+    }
+
+    if (!problemPageInfo.starterCode.trimmed().isEmpty()) {
+        setSourceCodeText(problemPageInfo.starterCode);
+        writeStartupLog("ProblemPage::openSubmit starter code applied");
+        return;
+    }
+
+    setSourceCodeText(QString());
+    writeStartupLog("ProblemPage::openSubmit starter code skipped");
+}
+
 void ProblemPage::updateCodeHighlightLanguage()
 {
-    auto *highlighter = dynamic_cast<CodeSyntaxHighlighter *>(m_codeHighlighter);
+    auto *highlighter = dynamic_cast<TreeSitterSyntaxHighlighter *>(m_codeHighlighter);
     if (highlighter == nullptr || m_languageComboBox == nullptr) {
         return;
     }
@@ -1817,18 +1688,14 @@ void ProblemPage::updateCodeHighlightLanguage()
     const QString label = currentLanguageLabel().toLower();
     const QString value = currentLanguageValue().toLower();
 
-    CodeSyntaxHighlighter::LanguageMode mode =
-        CodeSyntaxHighlighter::LanguageMode::PlainText;
+    TreeSitterSyntaxHighlighter::LanguageMode mode =
+        TreeSitterSyntaxHighlighter::LanguageMode::PlainText;
     if (label.contains("python") || value.contains("python")) {
-        mode = CodeSyntaxHighlighter::LanguageMode::Python;
+        mode = TreeSitterSyntaxHighlighter::LanguageMode::Python;
     } else if (label.contains("g++") || label.contains("gcc")
                || value.contains("g++") || value.contains("gcc")
                || value.contains("cpp") || value.contains("c++")) {
-        mode = CodeSyntaxHighlighter::LanguageMode::Cpp;
-    }
-
-    if (m_codeEdit != nullptr && m_codeEdit->toPlainText().isEmpty()) {
-        return;
+        mode = TreeSitterSyntaxHighlighter::LanguageMode::Cpp;
     }
 
     highlighter->setLanguageMode(mode);
@@ -1848,7 +1715,8 @@ void ProblemPage::refreshAiResponseView()
         if (m_aiTranscript.isEmpty()) {
             m_aiResponseTextEdit->clear();
         } else {
-            m_aiResponseTextEdit->setPlainText(m_aiTranscript);
+            m_aiResponseTextEdit->setMarkdown(
+                renderAiTranscriptMarkdown(m_aiTranscript));
         }
     }
 }
@@ -1958,6 +1826,9 @@ void ProblemPage::setDarkMode(bool dark)
         "}";
 
     setStyleSheet(dark ? lightStyle + darkOverride : lightStyle);
+    if (auto *highlighter = dynamic_cast<TreeSitterSyntaxHighlighter *>(m_codeHighlighter)) {
+        highlighter->setDarkMode(dark);
+    }
     if (m_codeEdit != nullptr) {
         m_codeEdit->viewport()->update();
         m_codeEdit->update();

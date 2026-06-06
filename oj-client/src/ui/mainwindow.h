@@ -142,6 +142,7 @@ private:
     QString m_aiConfigSummary;
     QString m_pendingAiRunTestCallId;
     QString m_pendingAiSubmitCallId;
+    bool m_pendingAiSubmitAwaitingResult = false;
     bool m_alarmEnabled = false;
     QSystemTrayIcon *m_trayIcon = nullptr;
     QMenu *m_trayMenu = nullptr;

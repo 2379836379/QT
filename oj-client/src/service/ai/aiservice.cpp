@@ -2,14 +2,37 @@
 
 #include "network/openaiclient.h"
 
+#include <QCoreApplication>
+#include <QDateTime>
+#include <QDir>
+#include <QFile>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QRegularExpression>
 #include <QStringList>
+#include <QTextStream>
 
 namespace
 {
+void writeAiLog(const QString &message)
+{
+    QDir dir(QCoreApplication::applicationDirPath());
+    if (dir.dirName().compare("build", Qt::CaseInsensitive) == 0) {
+        dir.cdUp();
+    }
+    dir.mkpath("data");
+
+    QFile file(dir.filePath("data/startup.log"));
+    if (!file.open(QIODevice::Append | QIODevice::Text)) {
+        return;
+    }
+
+    QTextStream stream(&file);
+    stream << QDateTime::currentDateTime().toString("yyyy-MM-dd HH:mm:ss.zzz")
+           << " | " << message << '\n';
+}
+
 QString defaultSystemPrompt()
 {
     return "You are an AI programming assistant for algorithm problems. "
@@ -48,17 +71,22 @@ AiService::AiService(OpenAiClient *client, QObject *parent)
 {
     connect(m_client, &OpenAiClient::responseDelta, this, [this](const QString &delta) {
         m_accumulatedResponse += delta;
+        writeAiLog(QString("AiService: responseDelta len=%1").arg(QString::number(delta.size())));
         emit responseDelta(delta);
     });
     connect(m_client,
             &OpenAiClient::responseCompleted,
             this,
             [this](const QJsonObject &response) {
+                writeAiLog(QString("AiService: responseCompleted keys=%1")
+                               .arg(QStringList(response.keys()).join(",")));
                 handleCompletedResponse(response);
             });
     connect(m_client, &OpenAiClient::requestFailed, this, [this](const QString &message) {
         m_thinking = false;
         emit thinkingChanged(false);
+        writeAiLog(QString("AiService: requestFailed %1")
+                       .arg(message.left(200).replace('\n', ' ')));
         if (m_debugLog.isEmpty()) {
             emit failed(message);
             return;
@@ -123,7 +151,10 @@ void AiService::ask(const QString &question,
     m_pendingToolCallId.clear();
     m_pendingToolName.clear();
     m_translationMode = false;
+    m_responseNonStreamFallbackTried = false;
+    m_chatCompletionFallbackTried = false;
     m_thinking = true;
+    writeAiLog(QString("AiService::ask begin question=%1").arg(m_question.left(80)));
     emit thinkingChanged(true);
     sendRequest();
 }
@@ -163,7 +194,10 @@ void AiService::translateProblem(const QString &description,
     m_pendingToolName.clear();
     m_translationMode = true;
     m_translationChatFallbackTried = false;
+    m_responseNonStreamFallbackTried = false;
+    m_chatCompletionFallbackTried = false;
     m_thinking = true;
+    writeAiLog("AiService::translateProblem begin");
     emit thinkingChanged(true);
     sendRequest();
 }
@@ -175,6 +209,10 @@ void AiService::completeToolCall(const QString &callId, const QString &outputTex
     }
 
     const QString completedToolName = m_pendingToolName;
+    writeAiLog(QString("AiService::completeToolCall tool=%1 callId=%2 outputLen=%3")
+                   .arg(completedToolName,
+                        callId,
+                        QString::number(outputText.size())));
     if (completedToolName == "run_test") {
         m_testOutput = outputText;
     }
@@ -199,6 +237,10 @@ void AiService::failToolCall(const QString &callId, const QString &message)
     }
 
     const QString failedToolName = m_pendingToolName;
+    writeAiLog(QString("AiService::failToolCall tool=%1 callId=%2 message=%3")
+                   .arg(failedToolName,
+                        callId,
+                        message.left(160).replace('\n', ' ')));
     m_inputItems = QJsonArray{makeMessageItem(
         "user",
         buildToolResultPrompt(failedToolName,
@@ -364,6 +406,9 @@ void AiService::sendRequest()
         return;
     }
     if (m_pendingToolCallId.isEmpty()) {
+        writeAiLog(QString("AiService::sendRequest translationMode=%1 inputItems=%2")
+                       .arg(m_translationMode ? "true" : "false",
+                            QString::number(m_inputItems.size())));
         const QJsonObject payload = buildRequestPayload(m_question,
                                                         m_problemDetail,
                                                         m_sourceCode,
@@ -411,6 +456,7 @@ void AiService::sendRequest()
                              QJsonDocument(chatPayload).toJson(QJsonDocument::Indented)));
             m_debugLog += requestText;
             m_translationChatFallbackTried = true;
+            writeAiLog("AiService::sendRequest using chat/completions fallback");
             m_client->createChatCompletion(m_config.apiKey.trimmed(), chatPayload);
         } else {
             const QJsonObject debugPayload = QJsonObject(payload);
@@ -424,9 +470,39 @@ void AiService::sendRequest()
                          QString::fromUtf8(
                              QJsonDocument(debugPayload).toJson(QJsonDocument::Indented)));
             m_debugLog += requestText;
+            writeAiLog("AiService::sendRequest using responses stream");
             m_client->createResponseStream(m_config.apiKey.trimmed(), payload);
         }
     }
+}
+
+void AiService::sendResponseFallback()
+{
+    if (m_client == nullptr) {
+        emit failed("AI client is not available.");
+        return;
+    }
+
+    const QJsonObject payload = buildRequestPayload(m_question,
+                                                    m_problemDetail,
+                                                    m_sourceCode,
+                                                    m_testInput,
+                                                    m_testOutput);
+    const QString requestText =
+        QString("OpenAI Request\n"
+                "POST %1\n\n"
+                "Payload:\n%2")
+            .arg(m_config.baseUrl.toString().endsWith('/')
+                     ? m_config.baseUrl.toString() + "responses"
+                     : m_config.baseUrl.toString() + "/responses",
+                 QString::fromUtf8(
+                     QJsonDocument(payload).toJson(QJsonDocument::Indented)));
+    if (!m_debugLog.isEmpty()) {
+        m_debugLog += "\n\n";
+    }
+    m_debugLog += requestText;
+    writeAiLog("AiService::sendResponseFallback using responses non-stream");
+    m_client->createResponse(m_config.apiKey.trimmed(), payload);
 }
 
 void AiService::sendChatCompletionFallback()
@@ -435,6 +511,7 @@ void AiService::sendChatCompletionFallback()
         emit failed("AI client is not available.");
         return;
     }
+    writeAiLog("AiService::sendChatCompletionFallback");
 
     QJsonArray messages;
     messages.append(QJsonObject{
@@ -482,6 +559,10 @@ void AiService::sendChatCompletionFallback()
 void AiService::handleCompletedResponse(const QJsonObject &response)
 {
     QJsonObject responseObject = unwrapResponseObject(response);
+    writeAiLog(QString("AiService::handleCompletedResponse object=%1 outputSize=%2 accumulatedLen=%3")
+                   .arg(responseObject.value("object").toString(),
+                        QString::number(responseObject.value("output").toArray().size()),
+                        QString::number(m_accumulatedResponse.size())));
     if (m_translationMode) {
         m_thinking = false;
         emit thinkingChanged(false);
@@ -525,6 +606,8 @@ void AiService::handleCompletedResponse(const QJsonObject &response)
         const QString type = itemObject.value("type").toString();
         if (type == "function_call") {
             hasToolCall = true;
+            writeAiLog(QString("AiService::handleCompletedResponse function_call name=%1")
+                           .arg(itemObject.value("name").toString()));
             processToolCall(itemObject);
             break;
         }
@@ -533,7 +616,36 @@ void AiService::handleCompletedResponse(const QJsonObject &response)
     if (!hasToolCall) {
         m_thinking = false;
         emit thinkingChanged(false);
-        const QString finalText = extractResponseText(responseObject);
+        const QString finalText = extractResponseText(responseObject).trimmed();
+        const QString streamedText = m_accumulatedResponse.trimmed();
+        writeAiLog(QString("AiService::handleCompletedResponse noToolCall finalLen=%1 streamedLen=%2")
+                       .arg(QString::number(finalText.size()),
+                            QString::number(streamedText.size())));
+        if (finalText.isEmpty() && !streamedText.isEmpty()) {
+            m_translationMode = false;
+            emit responseReady(streamedText);
+            return;
+        }
+        if (finalText.isEmpty() && streamedText.isEmpty()) {
+            if (!m_responseNonStreamFallbackTried) {
+                m_responseNonStreamFallbackTried = true;
+                m_thinking = true;
+                emit thinkingChanged(true);
+                writeAiLog("AiService::handleCompletedResponse empty output, fallback to non-stream responses");
+                sendResponseFallback();
+                return;
+            }
+            if (!m_chatCompletionFallbackTried) {
+                m_chatCompletionFallbackTried = true;
+                m_thinking = true;
+                emit thinkingChanged(true);
+                writeAiLog("AiService::handleCompletedResponse empty output, fallback to chat/completions");
+                sendChatCompletionFallback();
+                return;
+            }
+            emit failed("AI returned empty output.");
+            return;
+        }
         if (!finalText.isEmpty() && finalText != m_accumulatedResponse) {
             m_accumulatedResponse = finalText;
         }
@@ -548,6 +660,10 @@ void AiService::processToolCall(const QJsonObject &callObject)
     const QString toolName = callObject.value("name").toString();
     const QString callId = callObject.value("call_id").toString();
     const QJsonObject args = parseArguments(callObject.value("arguments").toString());
+    writeAiLog(QString("AiService::processToolCall name=%1 callId=%2 args=%3")
+                   .arg(toolName,
+                        callId,
+                        QString::fromUtf8(QJsonDocument(args).toJson(QJsonDocument::Compact))));
 
     if (callId.isEmpty() || toolName.isEmpty()) {
         emit failed("Invalid tool call from model.");
@@ -727,6 +843,9 @@ QString AiService::extractResponseText(const QJsonObject &response) const
     }
 
     const QJsonArray outputArray = response.value("output").toArray();
+    if (response.value("object").toString() == "response" && outputArray.isEmpty()) {
+        return QString();
+    }
     QStringList pieces;
     for (const QJsonValue &itemValue : outputArray) {
         const QJsonObject itemObject = itemValue.toObject();
