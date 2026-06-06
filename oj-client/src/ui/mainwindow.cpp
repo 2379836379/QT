@@ -364,6 +364,20 @@ void writeStartupLog(const QString &message)
     stream << QDateTime::currentDateTime().toString("yyyy-MM-dd HH:mm:ss.zzz")
            << " | " << message << '\n';
 }
+
+void clearStartupLog()
+{
+    QDir dir(QCoreApplication::applicationDirPath());
+    if (dir.dirName().compare("build", Qt::CaseInsensitive) == 0) {
+        dir.cdUp();
+    }
+    dir.mkpath("data");
+
+    QFile file(dir.filePath("data/startup.log"));
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate | QIODevice::Text)) {
+        return;
+    }
+}
 }
 
 MainWindow::MainWindow(QWidget *parent)
@@ -1747,6 +1761,7 @@ void MainWindow::saveCurrentProblemToFavorites()
 void MainWindow::closeEvent(QCloseEvent *event)
 {
     if (m_allowClose || m_trayIcon == nullptr || !m_trayIcon->isVisible()) {
+        clearStartupLog();
         QMainWindow::closeEvent(event);
         return;
     }

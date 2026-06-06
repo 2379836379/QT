@@ -36,6 +36,7 @@ public:
 
 private:
     bool openDatabase();
+    bool ensureSchema();
     bool upsertProblem(const ProblemPageInfo &problemPageInfo);
     ProblemPageInfo readProblem(const class QSqlQuery &query) const;
 

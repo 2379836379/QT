@@ -74,6 +74,9 @@ private:
 StoragePage::StoragePage(QWidget *parent)
     : QWidget(parent)
 {
+    constexpr int kRowHeight = 40;
+    constexpr int kRowSpacing = 12;
+
     auto *layout = new QVBoxLayout(this);
     layout->setContentsMargins(0, 0, 0, 0);
     layout->setSpacing(18);
@@ -136,57 +139,75 @@ StoragePage::StoragePage(QWidget *parent)
     contentFrame->setObjectName("storageContentFrame");
     auto *contentLayout = new QVBoxLayout(contentFrame);
     contentLayout->setContentsMargins(24, 22, 24, 22);
-    contentLayout->setSpacing(18);
+    contentLayout->setSpacing(kRowSpacing);
 
-    auto *cacheRow = new QHBoxLayout();
-    auto *cacheLabel = new QLabel("Cache Size", contentFrame);
+    auto *cacheRowWidget = new QWidget(contentFrame);
+    cacheRowWidget->setFixedHeight(kRowHeight);
+    auto *cacheRow = new QHBoxLayout(cacheRowWidget);
+    cacheRow->setContentsMargins(0, 0, 0, 0);
+    cacheRow->setSpacing(12);
+    auto *cacheLabel = new QLabel("Cache Size", cacheRowWidget);
     cacheLabel->setObjectName("storageLabel");
-    m_cacheSizeValueLabel = new QLabel("--", contentFrame);
+    m_cacheSizeValueLabel = new QLabel("--", cacheRowWidget);
     m_cacheSizeValueLabel->setObjectName("storageValueLabel");
     cacheRow->addWidget(cacheLabel);
     cacheRow->addStretch();
     cacheRow->addWidget(m_cacheSizeValueLabel);
 
-    auto *appRow = new QHBoxLayout();
-    auto *appLabel = new QLabel("Application Size", contentFrame);
+    auto *appRowWidget = new QWidget(contentFrame);
+    appRowWidget->setFixedHeight(kRowHeight);
+    auto *appRow = new QHBoxLayout(appRowWidget);
+    appRow->setContentsMargins(0, 0, 0, 0);
+    appRow->setSpacing(12);
+    auto *appLabel = new QLabel("Application Size", appRowWidget);
     appLabel->setObjectName("storageLabel");
-    m_appSizeValueLabel = new QLabel("--", contentFrame);
+    m_appSizeValueLabel = new QLabel("--", appRowWidget);
     m_appSizeValueLabel->setObjectName("storageValueLabel");
     appRow->addWidget(appLabel);
     appRow->addStretch();
     appRow->addWidget(m_appSizeValueLabel);
 
-    auto *alarmRow = new QHBoxLayout();
-    auto *alarmLabel = new QLabel("Alarm", contentFrame);
+    auto *alarmRowWidget = new QWidget(contentFrame);
+    alarmRowWidget->setFixedHeight(kRowHeight);
+    auto *alarmRow = new QHBoxLayout(alarmRowWidget);
+    alarmRow->setContentsMargins(0, 0, 0, 0);
+    alarmRow->setSpacing(12);
+    auto *alarmLabel = new QLabel("Alarm", alarmRowWidget);
     alarmLabel->setObjectName("storageLabel");
-    m_alarmToggleButton = new SlideSwitch(contentFrame);
+    m_alarmToggleButton = new SlideSwitch(alarmRowWidget);
     m_alarmToggleButton->setCheckable(true);
     alarmRow->addWidget(alarmLabel);
     alarmRow->addStretch();
     alarmRow->addWidget(m_alarmToggleButton);
 
-    auto *alarmTestRow = new QHBoxLayout();
-    auto *alarmTestLabel = new QLabel("Alarm Test", contentFrame);
+    auto *alarmTestRowWidget = new QWidget(contentFrame);
+    alarmTestRowWidget->setFixedHeight(kRowHeight);
+    auto *alarmTestRow = new QHBoxLayout(alarmTestRowWidget);
+    alarmTestRow->setContentsMargins(0, 0, 0, 0);
+    alarmTestRow->setSpacing(12);
+    auto *alarmTestLabel = new QLabel("Alarm Test", alarmTestRowWidget);
     alarmTestLabel->setObjectName("storageLabel");
-    m_alarmTestButton = new QPushButton("alarm test", contentFrame);
+    m_alarmTestButton = new QPushButton("alarm test", alarmTestRowWidget);
     m_alarmTestButton->setObjectName("storageClearButton");
     alarmTestRow->addWidget(alarmTestLabel);
     alarmTestRow->addStretch();
     alarmTestRow->addWidget(m_alarmTestButton);
 
-    auto *ringRow = new QHBoxLayout();
-    auto *ringLabel = new QLabel("Ring", contentFrame);
+    auto *ringRowWidget = new QWidget(contentFrame);
+    ringRowWidget->setFixedHeight(kRowHeight);
+    auto *ringRow = new QHBoxLayout(ringRowWidget);
+    ringRow->setContentsMargins(0, 0, 0, 0);
+    ringRow->setSpacing(12);
+    auto *ringLabel = new QLabel("Ring", ringRowWidget);
     ringLabel->setObjectName("storageLabel");
-    m_ringPathValueLabel = new QLabel("No file selected", contentFrame);
+    m_ringPathValueLabel = new QLabel("No file selected", ringRowWidget);
     m_ringPathValueLabel->setObjectName("storagePathLabel");
-    m_ringPathValueLabel->setWordWrap(true);
+    m_ringPathValueLabel->setWordWrap(false);
     m_ringPathValueLabel->setTextInteractionFlags(Qt::TextSelectableByMouse);
-    m_ringPathButton = new QPushButton("choose", contentFrame);
+    m_ringPathButton = new QPushButton("choose", ringRowWidget);
     m_ringPathButton->setObjectName("storageClearButton");
     ringRow->addWidget(ringLabel);
-    ringRow->addSpacing(18);
     ringRow->addWidget(m_ringPathValueLabel, 1);
-    ringRow->addSpacing(12);
     ringRow->addWidget(m_ringPathButton);
 
     m_statusLabel = new QLabel(contentFrame);
@@ -196,11 +217,11 @@ StoragePage::StoragePage(QWidget *parent)
     m_clearCacheButton = new QPushButton("Clear Cache", contentFrame);
     m_clearCacheButton->setObjectName("storageClearButton");
 
-    contentLayout->addLayout(cacheRow);
-    contentLayout->addLayout(appRow);
-    contentLayout->addLayout(alarmRow);
-    contentLayout->addLayout(alarmTestRow);
-    contentLayout->addLayout(ringRow);
+    contentLayout->addWidget(cacheRowWidget);
+    contentLayout->addWidget(appRowWidget);
+    contentLayout->addWidget(alarmRowWidget);
+    contentLayout->addWidget(alarmTestRowWidget);
+    contentLayout->addWidget(ringRowWidget);
     contentLayout->addWidget(m_statusLabel);
     contentLayout->addStretch();
     contentLayout->addWidget(m_clearCacheButton, 0, Qt::AlignLeft);

@@ -30,6 +30,36 @@ QString databasePath()
     dir.mkpath(".");
     return dir.filePath("favorites.db");
 }
+
+bool ensureColumn(QSqlDatabase &database,
+                  const QString &tableName,
+                  const QString &columnName,
+                  const QString &definition,
+                  QString *error)
+{
+    QSqlQuery infoQuery(database);
+    if (!infoQuery.exec(QString("PRAGMA table_info(%1)").arg(tableName))) {
+        if (error != nullptr) {
+            *error = infoQuery.lastError().text();
+        }
+        return false;
+    }
+
+    while (infoQuery.next()) {
+        if (infoQuery.value(1).toString() == columnName) {
+            return true;
+        }
+    }
+
+    QSqlQuery alterQuery(database);
+    const bool ok = alterQuery.exec(
+        QString("ALTER TABLE %1 ADD COLUMN %2 %3")
+            .arg(tableName, columnName, definition));
+    if (!ok && error != nullptr) {
+        *error = alterQuery.lastError().text();
+    }
+    return ok;
+}
 }
 
 FavoriteProblemRepository::FavoriteProblemRepository()
@@ -52,7 +82,13 @@ bool FavoriteProblemRepository::initialize()
         return false;
     }
 
-    QSqlQuery query(QSqlDatabase::database(m_connectionName));
+    return ensureSchema();
+}
+
+bool FavoriteProblemRepository::ensureSchema()
+{
+    QSqlDatabase database = QSqlDatabase::database(m_connectionName);
+    QSqlQuery query(database);
     bool ok = query.exec(
         "CREATE TABLE IF NOT EXISTS favorite_folders ("
         "id INTEGER PRIMARY KEY AUTOINCREMENT,"
@@ -83,6 +119,25 @@ bool FavoriteProblemRepository::initialize()
         ")");
     if (!ok) {
         m_lastError = query.lastError().text();
+        return false;
+    }
+
+    if (!ensureColumn(database, "favorite_problems", "starter_code", "TEXT", &m_lastError)) {
+        return false;
+    }
+    if (!ensureColumn(database, "favorite_problems", "input_spec", "TEXT", &m_lastError)) {
+        return false;
+    }
+    if (!ensureColumn(database, "favorite_problems", "output_spec", "TEXT", &m_lastError)) {
+        return false;
+    }
+    if (!ensureColumn(database, "favorite_problems", "sample_input", "TEXT", &m_lastError)) {
+        return false;
+    }
+    if (!ensureColumn(database, "favorite_problems", "sample_output", "TEXT", &m_lastError)) {
+        return false;
+    }
+    if (!ensureColumn(database, "favorite_problems", "hint", "TEXT", &m_lastError)) {
         return false;
     }
 
