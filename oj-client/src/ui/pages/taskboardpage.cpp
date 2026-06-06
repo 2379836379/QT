@@ -1,0 +1,269 @@
+#include "ui/pages/taskboardpage.h"
+#include "ui/lightmodeiconhelper.h"
+
+#include <QFrame>
+#include <QGridLayout>
+#include <QHBoxLayout>
+#include <QLabel>
+#include <QListWidget>
+#include <QListWidgetItem>
+#include <QMenu>
+#include <QPushButton>
+#include <QVBoxLayout>
+
+namespace
+{
+constexpr int ProblemUrlRole = Qt::UserRole;
+constexpr int ProblemTitleRole = Qt::UserRole + 1;
+
+struct StatusInfo
+{
+    QString key;
+    QString label;
+};
+
+const QList<StatusInfo> &statusInfos()
+{
+    static const QList<StatusInfo> infos = {
+        {"todo", "未开始"},
+        {"doing", "进行中"},
+        {"done", "已完成"},
+        {"redo", "待重做"}};
+    return infos;
+}
+
+QWidget *makeColumn(const QString &title,
+                    QListWidget **listOut,
+                    QWidget *parent)
+{
+    auto *column = new QFrame(parent);
+    column->setObjectName("taskColumnFrame");
+    auto *layout = new QVBoxLayout(column);
+    layout->setContentsMargins(14, 14, 14, 14);
+    layout->setSpacing(10);
+
+    auto *label = new QLabel(title, column);
+    label->setObjectName("taskColumnLabel");
+
+    auto *list = new QListWidget(column);
+    list->setObjectName("taskListWidget");
+    list->setContextMenuPolicy(Qt::CustomContextMenu);
+    list->setMinimumHeight(360);
+
+    layout->addWidget(label);
+    layout->addWidget(list, 1);
+    *listOut = list;
+    return column;
+}
+}
+
+TaskBoardPage::TaskBoardPage(QWidget *parent)
+    : QWidget(parent)
+{
+    auto *layout = new QVBoxLayout(this);
+    layout->setContentsMargins(0, 0, 0, 0);
+    layout->setSpacing(18);
+
+    auto *topFrame = new QFrame(this);
+    topFrame->setObjectName("taskTopFrame");
+    topFrame->setFixedHeight(80);
+    auto *topLayout = new QHBoxLayout(topFrame);
+    topLayout->setContentsMargins(24, 18, 24, 18);
+    topLayout->setSpacing(16);
+
+    auto *titleLabel = new QLabel("Task Board", topFrame);
+    titleLabel->setObjectName("taskTitleLabel");
+    auto *homeButton = new QPushButton("Home", topFrame);
+    homeButton->setObjectName("taskTopActionButton");
+    auto *themeButton = new QPushButton("Dark Mode", topFrame);
+    themeButton->setObjectName("taskTopActionButton");
+    auto *refreshButton = new QPushButton("Refresh", topFrame);
+    refreshButton->setObjectName("taskTopActionButton");
+
+    topLayout->addWidget(titleLabel, 1);
+    topLayout->addWidget(homeButton);
+    topLayout->addWidget(themeButton);
+    topLayout->addWidget(refreshButton);
+
+    auto *contentFrame = new QFrame(this);
+    contentFrame->setObjectName("taskContentFrame");
+    auto *contentLayout = new QVBoxLayout(contentFrame);
+    contentLayout->setContentsMargins(20, 18, 20, 18);
+    contentLayout->setSpacing(12);
+
+    m_statusLabel = new QLabel(contentFrame);
+    m_statusLabel->setObjectName("taskStatusLabel");
+    m_statusLabel->setWordWrap(true);
+
+    auto *columnsLayout = new QHBoxLayout();
+    columnsLayout->setSpacing(14);
+    columnsLayout->addWidget(makeColumn("未开始", &m_todoList, contentFrame), 1);
+    columnsLayout->addWidget(makeColumn("进行中", &m_doingList, contentFrame), 1);
+    columnsLayout->addWidget(makeColumn("已完成", &m_doneList, contentFrame), 1);
+    columnsLayout->addWidget(makeColumn("待重做", &m_redoList, contentFrame), 1);
+
+    contentLayout->addWidget(m_statusLabel);
+    contentLayout->addLayout(columnsLayout, 1);
+
+    layout->addWidget(topFrame);
+    layout->addWidget(contentFrame, 1);
+
+    homeButton->setToolTip("Home");
+    themeButton->setToolTip("Dark Mode");
+    refreshButton->setToolTip("Refresh");
+    LightModeIconHelper::applyIcon(homeButton, "homepage.svg");
+    LightModeIconHelper::applyIcon(themeButton, "dark-mode.png");
+    LightModeIconHelper::applyIcon(refreshButton, "refresh.svg");
+
+    setStyleSheet(
+        "TaskBoardPage { background: #f3f1eb; }"
+        "#taskTopFrame, #taskContentFrame, #taskColumnFrame {"
+        "  background: #fbfaf7;"
+        "  border: 1px solid #ded8cc;"
+        "  border-radius: 16px;"
+        "}"
+        "#taskTitleLabel {"
+        "  font-size: 28px;"
+        "  font-weight: 600;"
+        "  color: #1f2328;"
+        "}"
+        "#taskColumnLabel {"
+        "  font-size: 15px;"
+        "  font-weight: 600;"
+        "  color: #2f3a33;"
+        "}"
+        "#taskTopActionButton {"
+        "  min-width: 36px;"
+        "  padding: 6px;"
+        "  border: none;"
+        "  background: transparent;"
+        "  color: #2f3a33;"
+        "}"
+        "#taskTopActionButton:hover { background: transparent; }"
+        "#taskStatusLabel { color: #7a4b36; min-height: 18px; }"
+        "#taskListWidget {"
+        "  background: transparent;"
+        "  border: none;"
+        "  outline: none;"
+        "}"
+        "#taskListWidget::item {"
+        "  padding: 10px 4px;"
+        "  border-radius: 8px;"
+        "  margin: 2px 0px;"
+        "}"
+        "#taskListWidget::item:selected { background: #dcefea; color: #12343b; }"
+        "#taskListWidget::item:hover { background: #eef4ef; }");
+
+    const QList<QListWidget *> lists = {m_todoList, m_doingList, m_doneList, m_redoList};
+    for (QListWidget *list : lists) {
+        connect(list, &QListWidget::itemClicked, this, [this](QListWidgetItem *item) {
+            if (item == nullptr) {
+                return;
+            }
+            emit problemSelected(item->data(ProblemTitleRole).toString(),
+                                 item->data(ProblemUrlRole).toString());
+        });
+        connect(list, &QListWidget::customContextMenuRequested, this,
+                [this, list](const QPoint &pos) {
+                    showStatusMenu(list, pos);
+                });
+    }
+
+    connect(homeButton, &QPushButton::clicked, this, &TaskBoardPage::homeRequested);
+    connect(refreshButton, &QPushButton::clicked, this, &TaskBoardPage::refreshRequested);
+    connect(themeButton, &QPushButton::clicked, this, [this]() {
+        emit themeToggleRequested(!m_darkMode);
+    });
+}
+
+QListWidget *TaskBoardPage::listForStatus(const QString &status) const
+{
+    if (status == "doing") {
+        return m_doingList;
+    }
+    if (status == "done") {
+        return m_doneList;
+    }
+    if (status == "redo") {
+        return m_redoList;
+    }
+    return m_todoList;
+}
+
+void TaskBoardPage::showStatusMenu(QListWidget *list, const QPoint &pos)
+{
+    if (list == nullptr) {
+        return;
+    }
+    QListWidgetItem *item = list->itemAt(pos);
+    if (item == nullptr) {
+        return;
+    }
+
+    const QString url = item->data(ProblemUrlRole).toString();
+    QMenu menu(this);
+    for (const StatusInfo &info : statusInfos()) {
+        QAction *action = menu.addAction(QString("移动到: %1").arg(info.label));
+        const QString statusKey = info.key;
+        connect(action, &QAction::triggered, this, [this, url, statusKey]() {
+            emit statusChangeRequested(url, statusKey);
+        });
+    }
+    menu.exec(list->mapToGlobal(pos));
+}
+
+void TaskBoardPage::showTasks(const QList<ProblemMeta> &allMeta)
+{
+    const QList<QListWidget *> lists = {m_todoList, m_doingList, m_doneList, m_redoList};
+    for (QListWidget *list : lists) {
+        list->clear();
+    }
+
+    for (const ProblemMeta &meta : allMeta) {
+        QListWidget *list = listForStatus(meta.taskStatus);
+        const QString displayText = meta.title.isEmpty() ? meta.problemUrl : meta.title;
+        auto *item = new QListWidgetItem(displayText, list);
+        item->setData(ProblemUrlRole, meta.problemUrl);
+        item->setData(ProblemTitleRole, meta.title);
+        if (!meta.tags.isEmpty()) {
+            item->setToolTip(meta.tags.join(", "));
+        }
+    }
+
+    int total = allMeta.size();
+    if (total == 0) {
+        m_statusLabel->setText("还没有任何题目记录。在题目页的 Notes 面板保存后会出现在这里。");
+    } else {
+        m_statusLabel->setText(QString("共 %1 道题目记录。右键可移动状态。").arg(total));
+    }
+}
+
+void TaskBoardPage::setDarkMode(bool dark)
+{
+    m_darkMode = dark;
+    QString lightStyle = property("_lightStyleSheet").toString();
+    if (lightStyle.isEmpty()) {
+        lightStyle = styleSheet();
+        setProperty("_lightStyleSheet", lightStyle);
+    }
+
+    const QString darkOverride =
+        "TaskBoardPage { background: #000000; }"
+        "#taskTopFrame, #taskContentFrame, #taskColumnFrame {"
+        "  background: #1b232c;"
+        "  border: 1px solid #2c3844;"
+        "}"
+        "#taskTitleLabel, #taskColumnLabel { color: #d9e1e8; }"
+        "#taskTopActionButton {"
+        "  border: none;"
+        "  background: transparent;"
+        "  color: #e8edf2;"
+        "}"
+        "#taskTopActionButton:hover { background: #26313c; }"
+        "#taskStatusLabel { color: #f0b48a; }"
+        "#taskListWidget { color: #e8edf2; }"
+        "#taskListWidget::item:selected { background: #234257; color: #eff8ff; }"
+        "#taskListWidget::item:hover { background: #26313c; }";
+
+    setStyleSheet(dark ? lightStyle + darkOverride : lightStyle);
+}

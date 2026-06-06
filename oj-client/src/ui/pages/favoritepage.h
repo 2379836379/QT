@@ -33,6 +33,8 @@ signals:
     void homeRequested();
     void themeToggleRequested(bool dark);
     void refreshRequested();
+    void exportRequested();
+    void importRequested();
     void createFolderRequested(const QString &folderName);
     void folderRemoveRequested(qint64 folderId, const QString &folderName);
     void folderSelected(qint64 folderId, const QString &folderName);

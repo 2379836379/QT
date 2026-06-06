@@ -4,12 +4,15 @@
 #include "parser/problemparser.h"
 #include "parser/resultparser.h"
 #include "parser/submitparser.h"
+#include "repository/meta/problemmetarepository.h"
 
 #include <QHash>
 #include <QWidget>
 
 class QComboBox;
+class QCheckBox;
 class QLabel;
+class QLineEdit;
 class QObject;
 class QPlainTextEdit;
 class QPushButton;
@@ -81,6 +84,7 @@ public:
     bool isProblemTranslating() const;
     void setFavoriteEnabled(bool enabled);
     void setSubmitEnabled(bool enabled);
+    void setProblemMeta(const ProblemMeta &meta);
 
 signals:
     void backRequested();
@@ -88,6 +92,7 @@ signals:
     void themeToggleRequested(bool dark);
     void translateProblemRequested();
     void favoriteRequested();
+    void saveProblemMetaRequested(const ProblemMeta &meta);
     void aiAskRequested(const QString &question);
     void testRequested(const QString &languageLabel,
                        const QString &sourceText,
@@ -99,6 +104,7 @@ private:
     void restoreDraftOrStarterCode(const ProblemPageInfo &problemPageInfo);
     void setToolsExpanded(bool expanded);
     void setAiPanelVisible(bool visible);
+    void setNotesPanelVisible(bool visible);
     void setResultTab(bool showTestTab);
     void resetSubmitPanel();
     void updateCodeHighlightLanguage();
@@ -114,10 +120,13 @@ private:
     QPushButton *m_backToolButton = nullptr;
     QPushButton *m_favoriteToolButton = nullptr;
     QPushButton *m_aiToolButton = nullptr;
+    QPushButton *m_notesToolButton = nullptr;
     QPushButton *m_collapsedBackButton = nullptr;
     QPushButton *m_collapsedFavoriteButton = nullptr;
     QPushButton *m_collapsedAiButton = nullptr;
+    QPushButton *m_collapsedNotesButton = nullptr;
     QTextEdit *m_detailTextEdit = nullptr;
+    QPushButton *m_openInBrowserButton = nullptr;
     QFrame *m_aiFrame = nullptr;
     QLabel *m_aiConfigLabel = nullptr;
     QPlainTextEdit *m_aiPromptEdit = nullptr;
@@ -126,10 +135,18 @@ private:
     QPushButton *m_translateButton = nullptr;
     QTextEdit *m_aiResponseTextEdit = nullptr;
     QObject *m_codeHighlighter = nullptr;
+    QFrame *m_notesFrame = nullptr;
+    QComboBox *m_taskStatusCombo = nullptr;
+    QComboBox *m_difficultyCombo = nullptr;
+    QLineEdit *m_tagsEdit = nullptr;
+    QPlainTextEdit *m_noteEdit = nullptr;
+    QCheckBox *m_reviewCheck = nullptr;
+    QPushButton *m_saveMetaButton = nullptr;
     QComboBox *m_languageComboBox = nullptr;
     QPlainTextEdit *m_codeEdit = nullptr;
     QPushButton *m_submitButton = nullptr;
     QPushButton *m_inputButton = nullptr;
+    QPushButton *m_loadSampleButton = nullptr;
     QPushButton *m_testTabButton = nullptr;
     QPushButton *m_submitTabButton = nullptr;
     QSplitter *m_workspaceSplitter = nullptr;
@@ -143,6 +160,7 @@ private:
     bool m_toolsExpanded = true;
     bool m_testing = false;
     bool m_aiPanelVisible = false;
+    bool m_notesPanelVisible = false;
     bool m_aiThinking = false;
     QString m_aiTranscript;
     QString m_aiResponseBuffer;

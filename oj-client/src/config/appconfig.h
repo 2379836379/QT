@@ -18,6 +18,9 @@ public:
     static OpenAiConfig loadOpenAiConfig();
     static bool loadAlarmEnabled(bool defaultValue = false);
     static QString loadRingPath();
+    static QString loadJudgerBaseUrl(const QString &defaultValue);
+    static QString loadEmailVerifyUrl(const QString &defaultValue);
+    static QString loadOpenJudgeBaseUrl(const QString &defaultValue);
     static QString loadConfigText(QString *sourcePath = nullptr);
     static bool saveAlarmEnabled(bool enabled, QString *errorMessage = nullptr);
     static bool saveOpenAiConfig(const OpenAiConfig &config, QString *errorMessage = nullptr);

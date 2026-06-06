@@ -9,7 +9,7 @@ if (MSVC)
     add_compile_options(/Zc:__cplusplus)
 endif()
 
-find_package(Qt6 6.5 REQUIRED COMPONENTS Core Widgets Network Sql Multimedia)
+find_package(Qt6 6.5 REQUIRED COMPONENTS Core Widgets Network Sql Multimedia Test)
 
 qt_standard_project_setup()
 
@@ -40,6 +40,10 @@ qt_add_executable(oj
     src/ui/pages/problempage.h
     src/ui/pages/favoritepage.cpp
     src/ui/pages/favoritepage.h
+    src/ui/pages/taskboardpage.cpp
+    src/ui/pages/taskboardpage.h
+    src/ui/pages/statspage.cpp
+    src/ui/pages/statspage.h
     src/ui/pages/storagepage.cpp
     src/ui/pages/storagepage.h
     src/config/appconfig.cpp
@@ -88,6 +92,8 @@ qt_add_executable(oj
     src/repository/cache/problemcacherepository.h
     src/repository/favorite/favoriteproblemrepository.cpp
     src/repository/favorite/favoriteproblemrepository.h
+    src/repository/meta/problemmetarepository.cpp
+    src/repository/meta/problemmetarepository.h
     src/repository/login/logincacherepository.cpp
     src/repository/login/logincacherepository.h
     src/service/browse/homeservice.cpp
@@ -114,6 +120,8 @@ qt_add_executable(oj
     src/service/submit/submitservice.h
     src/service/favorite/favoriteproblemservice.cpp
     src/service/favorite/favoriteproblemservice.h
+    src/service/meta/problemmetaservice.cpp
+    src/service/meta/problemmetaservice.h
     src/service/login/emailverifyservice.cpp
     src/service/login/emailverifyservice.h
     src/service/login/logincacheservice.cpp
@@ -183,3 +191,49 @@ qt_generate_deploy_app_script(
     NO_UNSUPPORTED_PLATFORM_ERROR
 )
 install(SCRIPT ${deploy_script})
+
+# ---------------------------------------------------------------------------
+# Parser unit tests (QtTest)
+# ---------------------------------------------------------------------------
+enable_testing()
+
+qt_add_executable(oj_parser_tests
+    tests/test_parsers.cpp
+    src/parser/problemparser.cpp
+    src/parser/problemparser.h
+    src/parser/contestparser.cpp
+    src/parser/contestparser.h
+    src/parser/parsercommon.cpp
+    src/parser/parsercommon.h
+)
+
+target_include_directories(oj_parser_tests
+    PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/src
+)
+
+target_link_libraries(oj_parser_tests
+    PRIVATE
+        Qt::Core
+        Qt::Test
+)
+
+add_test(NAME oj_parser_tests COMMAND oj_parser_tests)
+
+# ---------------------------------------------------------------------------
+# Packaging (CPack): macOS .dmg / Linux .tar.gz
+# ---------------------------------------------------------------------------
+set(CPACK_PACKAGE_NAME "oj-client")
+set(CPACK_PACKAGE_VENDOR "oj-client")
+set(CPACK_PACKAGE_VERSION "1.0.0")
+set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "OpenJudge desktop client")
+
+if (APPLE)
+    set(CPACK_GENERATOR "DragNDrop")
+elseif (UNIX)
+    set(CPACK_GENERATOR "TGZ")
+elseif (WIN32)
+    set(CPACK_GENERATOR "ZIP")
+endif()
+
+include(CPack)

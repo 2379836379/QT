@@ -11,6 +11,7 @@
 #include "repository/cache/homecacherepository.h"
 #include "repository/cache/problemcacherepository.h"
 #include "repository/favorite/favoriteproblemrepository.h"
+#include "repository/meta/problemmetarepository.h"
 #include "repository/login/logincacherepository.h"
 #include "repository/submit/classrepository.h"
 #include "repository/submit/contestrepository.h"
@@ -24,6 +25,7 @@
 #include "service/browse/problemservice.h"
 #include "service/cache/cacheservice.h"
 #include "service/favorite/favoriteproblemservice.h"
+#include "service/meta/problemmetaservice.h"
 #include "service/app/applicationsizeservice.h"
 #include "service/ai/aiservice.h"
 #include "service/login/loginservice.h"
@@ -37,6 +39,8 @@
 #include "ui/pages/contestpage.h"
 #include "ui/pages/aiconfigpage.h"
 #include "ui/pages/favoritepage.h"
+#include "ui/pages/taskboardpage.h"
+#include "ui/pages/statspage.h"
 #include "ui/pages/homepage.h"
 #include "ui/lightmodeiconhelper.h"
 #include "ui/pages/loginpage.h"
@@ -57,7 +61,9 @@
 #include <QMediaPlayer>
 #include <QFile>
 #include <QFileInfo>
+#include <QHash>
 #include <QIcon>
+#include <QJsonParseError>
 #include <QTextStream>
 #include <QTimer>
 #include <QUrl>
@@ -428,6 +434,17 @@ MainWindow::MainWindow(QWidget *parent)
     m_emailVerifyService = new EmailVerifyService(this);
     m_applicationSizeService = new ApplicationSizeService(this);
     writeStartupLog("MainWindow: app services created");
+
+    const QString openJudgeBaseUrl =
+        AppConfig::loadOpenJudgeBaseUrl("http://openjudge.cn");
+    const QString judgerBaseUrl =
+        AppConfig::loadJudgerBaseUrl("http://10.129.240.62:18080");
+    const QString emailVerifyUrl =
+        AppConfig::loadEmailVerifyUrl("http://10.129.240.62:8080");
+    m_client->setBaseUrl(openJudgeBaseUrl);
+    m_client->setJudgerBaseUrl(judgerBaseUrl);
+    m_emailVerifyService->setBaseUrl(QUrl(emailVerifyUrl));
+    writeStartupLog("MainWindow: service endpoints configured");
     const OpenAiConfig openAiConfig = AppConfig::loadOpenAiConfig();
     writeStartupLog("MainWindow: openai config loaded");
     m_openAiClient->setBaseUrl(openAiConfig.baseUrl);
@@ -510,6 +527,9 @@ MainWindow::MainWindow(QWidget *parent)
     m_favoriteProblemRepository = new FavoriteProblemRepository();
     m_favoriteProblemService = new FavoriteProblemService(
         m_favoriteProblemRepository, this);
+    m_problemMetaRepository = new ProblemMetaRepository();
+    m_problemMetaService = new ProblemMetaService(
+        m_problemMetaRepository, this);
     m_resultService = new ResultService(m_resultRepository, this);
     m_submitService = new SubmitService(m_submitRepository, this);
     m_reminderService = new ReminderService(
@@ -551,6 +571,8 @@ MainWindow::MainWindow(QWidget *parent)
 
         if (!m_favoriteProblemService->initialize()) {
         }
+        if (!m_problemMetaService->initialize()) {
+        }
         writeStartupLog("MainWindow: deferred initialization complete");
     });
     writeStartupLog("MainWindow: constructor end");
@@ -564,6 +586,7 @@ MainWindow::~MainWindow()
     delete m_problemCacheRepository;
     delete m_loginCacheRepository;
     delete m_favoriteProblemRepository;
+    delete m_problemMetaRepository;
     delete ui;
 }
 
@@ -584,6 +607,10 @@ void MainWindow::setupUiState()
     writeStartupLog("MainWindow: problem page created");
     m_favoritePage = new FavoritePage(this);
     writeStartupLog("MainWindow: favorite page created");
+    m_taskBoardPage = new TaskBoardPage(this);
+    writeStartupLog("MainWindow: task board page created");
+    m_statsPage = new StatsPage(this);
+    writeStartupLog("MainWindow: stats page created");
     m_storagePage = new StoragePage(this);
     writeStartupLog("MainWindow: storage page created");
 
@@ -594,6 +621,8 @@ void MainWindow::setupUiState()
     ui->pageStack->addWidget(m_contestPage);
     ui->pageStack->addWidget(m_problemPage);
     ui->pageStack->addWidget(m_favoritePage);
+    ui->pageStack->addWidget(m_taskBoardPage);
+    ui->pageStack->addWidget(m_statsPage);
     ui->pageStack->addWidget(m_storagePage);
     writeStartupLog("MainWindow: pages added to stack");
 
@@ -857,6 +886,27 @@ void MainWindow::connectSignals()
         });
     connect(
         m_homePage,
+        &HomePage::tasksRequested,
+        this,
+        [this]() {
+            m_taskBoardPage->showTasks(m_problemMetaService->loadAllMeta());
+            pushPage(m_taskBoardPage);
+        });
+    connect(
+        m_homePage,
+        &HomePage::statsRequested,
+        this,
+        [this]() {
+            m_statsPage->showStats(
+                m_problemMetaService->statusCounts(),
+                m_problemMetaService->tagCounts(),
+                m_problemMetaService->notesCount(),
+                m_favoriteProblemService->loadFolders(),
+                m_problemMetaService->reviewProblems());
+            pushPage(m_statsPage);
+        });
+    connect(
+        m_homePage,
         &HomePage::refreshRequested,
         this,
         [this]() {
@@ -948,6 +998,16 @@ void MainWindow::connectSignals()
         &MainWindow::saveCurrentProblemToFavorites);
     connect(
         m_problemPage,
+        &ProblemPage::saveProblemMetaRequested,
+        this,
+        [this](const ProblemMeta &meta) {
+            if (!m_problemMetaService->saveMeta(meta)) {
+                m_problemPage->showProblemLoadFailed(
+                    m_problemMetaService->lastError());
+            }
+        });
+    connect(
+        m_problemPage,
         &ProblemPage::aiAskRequested,
         this,
         [this](const QString &question) {
@@ -1012,6 +1072,171 @@ void MainWindow::connectSignals()
         });
     connect(
         m_favoritePage,
+        &FavoritePage::exportRequested,
+        this,
+        [this]() {
+            const QString path = QFileDialog::getSaveFileName(
+                this,
+                "Export Favorites",
+                "favorites.json",
+                "JSON Files (*.json)");
+            if (path.isEmpty()) {
+                return;
+            }
+
+            QJsonArray foldersArray;
+            const QList<FavoriteFolderInfo> folders =
+                m_favoriteProblemService->loadFolders();
+            for (const FavoriteFolderInfo &folder : folders) {
+                QJsonObject folderObject;
+                folderObject.insert("name", folder.name);
+                QJsonArray problemsArray;
+                const QList<ProblemPageInfo> favorites =
+                    m_favoriteProblemService->loadFavoritesInFolder(folder.id);
+                for (const ProblemPageInfo &info : favorites) {
+                    QJsonObject problemObject;
+                    problemObject.insert("problemUrl", info.problemUrl);
+                    problemObject.insert("title", info.title);
+                    problemObject.insert("submitUrl", info.submitUrl);
+                    problemObject.insert("timeLimit", info.timeLimit);
+                    problemObject.insert("memoryLimit", info.memoryLimit);
+                    problemObject.insert("description", info.description);
+                    problemObject.insert("starterCode", info.starterCode);
+                    problemObject.insert("inputSpec", info.inputSpec);
+                    problemObject.insert("outputSpec", info.outputSpec);
+                    problemObject.insert("sampleInput", info.sampleInput);
+                    problemObject.insert("sampleOutput", info.sampleOutput);
+                    problemObject.insert("hint", info.hint);
+                    problemsArray.append(problemObject);
+                }
+                folderObject.insert("problems", problemsArray);
+                foldersArray.append(folderObject);
+            }
+
+            QJsonObject root;
+            root.insert("version", 1);
+            root.insert("folders", foldersArray);
+
+            QFile file(path);
+            if (!file.open(QIODevice::WriteOnly | QIODevice::Text | QIODevice::Truncate)) {
+                m_favoritePage->showFavoriteOperationFailed(
+                    "Failed to write file: " + file.errorString());
+                return;
+            }
+            file.write(QJsonDocument(root).toJson(QJsonDocument::Indented));
+            file.close();
+            m_favoritePage->showFavoriteOperationFailed(
+                QString("Exported %1 folder(s) to %2")
+                    .arg(QString::number(folders.size()), path));
+        });
+    connect(
+        m_favoritePage,
+        &FavoritePage::importRequested,
+        this,
+        [this]() {
+            const QString path = QFileDialog::getOpenFileName(
+                this,
+                "Import Favorites",
+                QString(),
+                "JSON Files (*.json)");
+            if (path.isEmpty()) {
+                return;
+            }
+
+            QFile file(path);
+            if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+                m_favoritePage->showFavoriteOperationFailed(
+                    "Failed to read file: " + file.errorString());
+                return;
+            }
+            const QByteArray data = file.readAll();
+            file.close();
+
+            QJsonParseError parseError;
+            const QJsonDocument document = QJsonDocument::fromJson(data, &parseError);
+            if (parseError.error != QJsonParseError::NoError || !document.isObject()) {
+                m_favoritePage->showFavoriteOperationFailed(
+                    "Invalid JSON: " + parseError.errorString());
+                return;
+            }
+
+            const QJsonArray foldersArray =
+                document.object().value("folders").toArray();
+
+            QHash<QString, qint64> folderIdByName;
+            for (const FavoriteFolderInfo &folder :
+                 m_favoriteProblemService->loadFolders()) {
+                folderIdByName.insert(folder.name, folder.id);
+            }
+
+            int importedProblems = 0;
+            for (const QJsonValue &folderValue : foldersArray) {
+                const QJsonObject folderObject = folderValue.toObject();
+                const QString folderName = folderObject.value("name").toString().trimmed();
+                if (folderName.isEmpty()) {
+                    continue;
+                }
+
+                qint64 folderId = -1;
+                if (folderIdByName.contains(folderName)) {
+                    folderId = folderIdByName.value(folderName);
+                } else {
+                    if (!m_favoriteProblemService->createFolder(folderName, &folderId)) {
+                        m_favoritePage->showFavoriteOperationFailed(
+                            m_favoriteProblemService->lastError());
+                        return;
+                    }
+                    if (folderId < 0) {
+                        for (const FavoriteFolderInfo &folder :
+                             m_favoriteProblemService->loadFolders()) {
+                            if (folder.name == folderName) {
+                                folderId = folder.id;
+                                break;
+                            }
+                        }
+                    }
+                    folderIdByName.insert(folderName, folderId);
+                }
+
+                if (folderId < 0) {
+                    continue;
+                }
+
+                const QJsonArray problemsArray =
+                    folderObject.value("problems").toArray();
+                for (const QJsonValue &problemValue : problemsArray) {
+                    const QJsonObject problemObject = problemValue.toObject();
+                    ProblemPageInfo info;
+                    info.problemUrl = problemObject.value("problemUrl").toString();
+                    if (info.problemUrl.isEmpty()) {
+                        continue;
+                    }
+                    info.title = problemObject.value("title").toString();
+                    info.submitUrl = problemObject.value("submitUrl").toString();
+                    info.timeLimit = problemObject.value("timeLimit").toString();
+                    info.memoryLimit = problemObject.value("memoryLimit").toString();
+                    info.description = problemObject.value("description").toString();
+                    info.starterCode = problemObject.value("starterCode").toString();
+                    info.inputSpec = problemObject.value("inputSpec").toString();
+                    info.outputSpec = problemObject.value("outputSpec").toString();
+                    info.sampleInput = problemObject.value("sampleInput").toString();
+                    info.sampleOutput = problemObject.value("sampleOutput").toString();
+                    info.hint = problemObject.value("hint").toString();
+                    info.tried_people = 0;
+                    info.passed_people = 0;
+                    if (m_favoriteProblemService->saveFavoriteToFolder(info, folderId)) {
+                        ++importedProblems;
+                    }
+                }
+            }
+
+            m_favoritePage->showFolders(m_favoriteProblemService->loadFolders());
+            m_favoritePage->showFavoriteOperationFailed(
+                QString("Imported %1 problem(s).")
+                    .arg(QString::number(importedProblems)));
+        });
+    connect(
+        m_favoritePage,
         &FavoritePage::createFolderRequested,
         this,
         [this](const QString &folderName) {
@@ -1072,6 +1297,60 @@ void MainWindow::connectSignals()
                 folderId,
                 folderName,
                 m_favoriteProblemService->loadFavoritesInFolder(folderId));
+        });
+    connect(m_taskBoardPage, &TaskBoardPage::homeRequested, this, [this]() {
+        showRootPage(m_homePage);
+    });
+    connect(m_taskBoardPage, &TaskBoardPage::themeToggleRequested, this, [this](bool dark) {
+        applyDarkMode(dark);
+    });
+    connect(m_taskBoardPage, &TaskBoardPage::refreshRequested, this, [this]() {
+        m_taskBoardPage->showTasks(m_problemMetaService->loadAllMeta());
+    });
+    connect(
+        m_taskBoardPage,
+        &TaskBoardPage::problemSelected,
+        this,
+        [this](const QString &title, const QString &url) {
+            openProblemPage(url, title, true);
+        });
+    connect(
+        m_taskBoardPage,
+        &TaskBoardPage::statusChangeRequested,
+        this,
+        [this](const QString &url, const QString &newStatus) {
+            if (url.isEmpty()) {
+                return;
+            }
+            ProblemMeta meta;
+            meta.problemUrl = url;
+            m_problemMetaService->loadMeta(url, &meta);
+            meta.taskStatus = newStatus;
+            if (!m_problemMetaService->saveMeta(meta)) {
+                return;
+            }
+            m_taskBoardPage->showTasks(m_problemMetaService->loadAllMeta());
+        });
+    connect(m_statsPage, &StatsPage::homeRequested, this, [this]() {
+        showRootPage(m_homePage);
+    });
+    connect(m_statsPage, &StatsPage::themeToggleRequested, this, [this](bool dark) {
+        applyDarkMode(dark);
+    });
+    connect(m_statsPage, &StatsPage::refreshRequested, this, [this]() {
+        m_statsPage->showStats(
+            m_problemMetaService->statusCounts(),
+            m_problemMetaService->tagCounts(),
+            m_problemMetaService->notesCount(),
+            m_favoriteProblemService->loadFolders(),
+            m_problemMetaService->reviewProblems());
+    });
+    connect(
+        m_statsPage,
+        &StatsPage::problemSelected,
+        this,
+        [this](const QString &title, const QString &url) {
+            openProblemPage(url, title, true);
         });
     connect(m_storagePage, &StoragePage::backRequested, this, &MainWindow::popPage);
     connect(m_storagePage, &StoragePage::homeRequested, this, [this]() {
@@ -1619,6 +1898,14 @@ void MainWindow::setCurrentProblem(const ProblemPageInfo &problemPageInfo)
     m_problemPage->setFavoriteEnabled(m_hasCurrentProblem);
     m_problemPage->setSubmitEnabled(
         m_hasCurrentProblem && !problemPageInfo.submitUrl.isEmpty());
+
+    ProblemMeta meta;
+    meta.problemUrl = problemPageInfo.problemUrl;
+    meta.title = problemPageInfo.title;
+    if (m_hasCurrentProblem) {
+        m_problemMetaService->loadMeta(problemPageInfo.problemUrl, &meta);
+    }
+    m_problemPage->setProblemMeta(meta);
 }
 
 void MainWindow::applyDarkMode(bool dark)
@@ -1661,6 +1948,14 @@ void MainWindow::applyDarkMode(bool dark)
     if (m_favoritePage != nullptr) {
         m_favoritePage->setDarkMode(dark);
         LightModeIconHelper::refreshIcons(m_favoritePage);
+    }
+    if (m_taskBoardPage != nullptr) {
+        m_taskBoardPage->setDarkMode(dark);
+        LightModeIconHelper::refreshIcons(m_taskBoardPage);
+    }
+    if (m_statsPage != nullptr) {
+        m_statsPage->setDarkMode(dark);
+        LightModeIconHelper::refreshIcons(m_statsPage);
     }
     if (m_storagePage != nullptr) {
         m_storagePage->setDarkMode(dark);

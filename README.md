@@ -4,6 +4,8 @@
 邮件验证服务 [OJ-server](https://github.com/2379836379/OJ-server)  
 程序测试服务 [OJ-judger](https://github.com/2379836379/OJ-judger)  
 
+> 本轮新增功能的完整改动说明见 [实现变更文档.md](实现变更文档.md)。
+
 ## 项目目标
 
 这个项目的目标是把 OpenJudge 上常见的做题流程放到一个本地桌面应用里完成：
@@ -51,9 +53,11 @@
 - 提交区
 - 测试区
 - AI 区
+- Notes 侧栏（标签 / 笔记 / 任务状态 / 错题本）
 - 收藏入口
 - Home / Dark Mode 顶部按钮
 - 左侧可折叠工具栏
+- 题面顶栏 **Web** 按钮：在系统浏览器打开当前题目
 
 题面展示能力包括：
 
@@ -95,6 +99,7 @@
   - Python -> `main.py`
   - Rust -> `main.rs`
 - 点击 `input` 后可对当前代码执行本地测试。
+- 点击 `sample` 可一键将样例输入填入测试输入框。
 
 当前测试结果展示策略：
 
@@ -153,6 +158,7 @@ AI 已实现的能力：
 
 AI 对话支持：
 
+- 预设提示按钮：解释题意 / 写暴力解 / 优化复杂度
 - 流式响应
 - Markdown 渲染显示回答
 - 多轮对话记录显示在响应区
@@ -197,8 +203,16 @@ Problem 页支持对题面部分内容做 AI 翻译。
 - 支持从收藏中重新打开题目
 - 收藏数据本地持久化
 - 收藏题目同时保存题面和相关信息，便于离线回看
+- 支持导出 / 导入收藏夹为 JSON（合并导入）
 
-### 13. 缓存与本地存储
+### 13. 本地刷题管理（标签 / 笔记 / 看板 / 统计）
+
+- **Notes 侧栏**：为每道题记录任务状态、难度、标签、个人笔记，可勾选加入错题本
+- **任务看板**：首页入口 Task Board，四栏展示未开始 / 进行中 / 已完成 / 待重做，右键切换状态
+- **统计与错题本**：首页入口 Stats，展示状态分布、标签 Top 8、笔记数、收藏数；错题本列表可点击打开
+- 数据存储于 `data/problemmeta.db`，与收藏、提交等逻辑独立
+
+### 14. 缓存与本地存储
 
 项目当前维护多类本地缓存：
 
@@ -208,6 +222,7 @@ Problem 页支持对题面部分内容做 AI 翻译。
 - 题目缓存
 - 登录缓存
 - 收藏数据库
+- 题目元数据数据库（`problemmeta.db`：标签、笔记、任务状态、错题本）
 - 题目代码草稿缓存
 - 题目语言选择缓存
 - AI 翻译缓存
@@ -219,7 +234,7 @@ Storage / Set 页面支持：
 - 一键清理缓存
 - 显示当前状态信息
 
-### 14. 截止提醒与闹钟
+### 15. 截止提醒与闹钟
 
 项目支持截止提醒和本地响铃。
 
@@ -240,7 +255,7 @@ Storage / Set 页面支持：
 - 当 contest 距截止时间剩余 1 / 2 / 3 小时时各提醒一次
 - 提醒时显示系统托盘通知并播放音频
 
-### 15. 系统托盘
+### 16. 系统托盘
 
 - 关闭主窗口时默认最小化到系统托盘
 - 托盘图标支持右键菜单
@@ -248,7 +263,7 @@ Storage / Set 页面支持：
 - 支持从托盘直接退出应用
 - 首次关闭到托盘时会显示通知提示
 
-### 16. 外观与交互
+### 17. 外观与交互
 
 当前 UI 已支持：
 
@@ -270,14 +285,20 @@ Storage / Set 页面支持：
 - StoragePage
 - AiConfigPage
 
-### 17. 图标与资源
+### 18. 图标与资源
 
 - 应用图标、任务栏图标、托盘图标统一使用项目资源图标
 - 浅色 / 深色模式按钮图标分别来自：
   - `oj-client/images/light_mode`
   - `oj-client/images/dark_mode`
 
-### 18. 安装包与发布
+### 19. 测试与持续集成
+
+- 解析器单元测试：`oj_parser_tests`（QtTest），覆盖 `ProblemParser`、`ContestParser`、`ParserCommon`
+- GitHub Actions：`.github/workflows/build.yml`，三平台矩阵构建 + `ctest`
+- CPack 打包：macOS `.dmg`、Linux `.tar.gz`、Windows `.zip`
+
+### 20. 安装包与发布
 
 项目已经提供 Windows 安装脚本：
 
@@ -371,6 +392,50 @@ oj-client/installer.iss
 
 生成安装包。
 
+### 4. macOS / Linux 构建
+
+仓库根目录的 CMake 工程位于 `oj-client/` 子目录，可在 macOS / Linux 上直接构建：
+
+```bash
+# 在仓库根目录执行
+cmake -S oj-client -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build --parallel
+```
+
+构建产物：
+
+- macOS：`build/oj.app`
+- Linux：`build/oj`
+
+依赖准备：
+
+- macOS：安装 Qt 6.5+（建议用官方在线安装器或 `brew install qt`），需包含 `qtmultimedia` 模块
+- Linux（Debian/Ubuntu）：`sudo apt-get install -y libgl1-mesa-dev libpulse-dev`，并安装 Qt 6.5+
+
+### 5. 运行单元测试
+
+解析器单元测试基于 QtTest，构建后用 `ctest` 运行：
+
+```bash
+cmake -S oj-client -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build --parallel
+cd build && ctest --output-on-failure
+```
+
+### 6. 跨平台打包（CPack）
+
+构建完成后，可用 CPack 生成对应平台的分发包：
+
+```bash
+cd build
+cpack            # macOS 生成 .dmg；Linux 生成 .tar.gz；Windows 生成 .zip
+```
+
+### 7. 持续集成（GitHub Actions）
+
+`.github/workflows/build.yml` 会在 push / PR 时于 `ubuntu-latest`、`windows-latest`、
+`macos-latest` 三个平台自动安装 Qt 6.5、构建并运行 `ctest`。
+
 ## 配置说明
 
 ### 1. `config.toml`
@@ -388,16 +453,21 @@ oj-client/installer.iss
 
 - 闹钟开关
 - 铃声路径
+- `openjudge_base_url`：OpenJudge 主站地址
+- `judger_base_url`：本地判题服务地址
+- `email_verify_url`：邮箱验证服务地址
 - 其他非 AI 配置
 
 ## 当前已知限制
 
 - AI 工具调用能力依赖所接入的 OpenAI 兼容服务是否正确支持 `/responses`。
-- 本地 judge/email 服务地址当前是固定配置。
+- judge / email / OpenJudge 地址可通过 `appstate.toml` 配置，未配置时使用内置默认值。
 - 缓存和登录数据库目前仍默认写在项目 / 应用目录下，而不是统一放到用户目录。
 
 ## 后续可继续完善的方向
 
+- 任务看板支持拖拽改状态
+- 元数据导出 / 导入
 - 增强题面解析兼容性(特指某些代码填空题)
 - 继续完善 C++ / Python 语法高亮规则
 - 补充自动化测试和 CI, 改进 AI 的工具调用能力(正在完成)

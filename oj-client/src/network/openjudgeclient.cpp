@@ -40,6 +40,13 @@ void OpenJudgeClient::setBaseUrl(const QString &baseUrl)
     m_baseUrl = baseUrl;
 }
 
+void OpenJudgeClient::setJudgerBaseUrl(const QString &judgerBaseUrl)
+{
+    if (!judgerBaseUrl.trimmed().isEmpty()) {
+        m_judgerBaseUrl = judgerBaseUrl.trimmed();
+    }
+}
+
 void OpenJudgeClient::setCookieStore(CookieStore *cookieStore)
 {
     m_cookieStore = cookieStore;

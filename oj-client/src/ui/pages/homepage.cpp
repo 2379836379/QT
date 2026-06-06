@@ -316,6 +316,10 @@ HomePage::HomePage(QWidget *parent)
 
     m_favoritesButton = new QPushButton("Open Favorites", m_toolsPanel);
     m_favoritesButton->setObjectName("homeToolButton");
+    m_tasksButton = new QPushButton("Task Board", m_toolsPanel);
+    m_tasksButton->setObjectName("homeToolButton");
+    m_statsButton = new QPushButton("Stats", m_toolsPanel);
+    m_statsButton->setObjectName("homeToolButton");
     m_storageButton = new QPushButton("Set", m_toolsPanel);
     m_storageButton->setObjectName("homeToolButton");
     m_aiConfigButton = new QPushButton("AI Config", m_toolsPanel);
@@ -332,6 +336,12 @@ HomePage::HomePage(QWidget *parent)
     m_collapsedFavoritesButton = new QPushButton("F", m_collapsedToolsPanel);
     m_collapsedFavoritesButton->setObjectName("homeToolIconButton");
     m_collapsedFavoritesButton->setToolTip("Open Favorites");
+    m_collapsedTasksButton = new QPushButton("T", m_collapsedToolsPanel);
+    m_collapsedTasksButton->setObjectName("homeToolIconButton");
+    m_collapsedTasksButton->setToolTip("Task Board");
+    m_collapsedStatsButton = new QPushButton("St", m_collapsedToolsPanel);
+    m_collapsedStatsButton->setObjectName("homeToolIconButton");
+    m_collapsedStatsButton->setToolTip("Stats");
     m_collapsedStorageButton = new QPushButton("S", m_collapsedToolsPanel);
     m_collapsedStorageButton->setObjectName("homeToolIconButton");
     m_collapsedStorageButton->setToolTip("Set");
@@ -343,12 +353,16 @@ HomePage::HomePage(QWidget *parent)
     m_collapsedLogoutButton->setToolTip("Log Out");
 
     collapsedLayout->addWidget(m_collapsedFavoritesButton);
+    collapsedLayout->addWidget(m_collapsedTasksButton);
+    collapsedLayout->addWidget(m_collapsedStatsButton);
     collapsedLayout->addWidget(m_collapsedStorageButton);
     collapsedLayout->addWidget(m_collapsedAiConfigButton);
     collapsedLayout->addWidget(m_collapsedLogoutButton);
     collapsedLayout->addStretch();
 
     toolsPanelLayout->addWidget(m_favoritesButton);
+    toolsPanelLayout->addWidget(m_tasksButton);
+    toolsPanelLayout->addWidget(m_statsButton);
     toolsPanelLayout->addWidget(m_storageButton);
     toolsPanelLayout->addWidget(m_aiConfigButton);
     toolsPanelLayout->addWidget(m_logoutButton);
@@ -402,10 +416,14 @@ HomePage::HomePage(QWidget *parent)
     m_themeButton->setToolTip("Dark Mode");
     refreshButton->setToolTip("Refresh");
     m_favoritesButton->setToolTip("Favorites");
+    m_tasksButton->setToolTip("Task Board");
+    m_statsButton->setToolTip("Stats");
     m_storageButton->setToolTip("Set");
     m_aiConfigButton->setToolTip("AI Config");
     m_logoutButton->setToolTip("Log Out");
     m_collapsedFavoritesButton->setToolTip("Favorites");
+    m_collapsedTasksButton->setToolTip("Task Board");
+    m_collapsedStatsButton->setToolTip("Stats");
     m_collapsedStorageButton->setToolTip("Set");
     m_collapsedAiConfigButton->setToolTip("AI Config");
     m_collapsedLogoutButton->setToolTip("Log Out");
@@ -431,6 +449,8 @@ HomePage::HomePage(QWidget *parent)
                 item->data(Qt::UserRole).toString());
         });
     connect(m_favoritesButton, &QPushButton::clicked, this, &HomePage::favoritesRequested);
+    connect(m_tasksButton, &QPushButton::clicked, this, &HomePage::tasksRequested);
+    connect(m_statsButton, &QPushButton::clicked, this, &HomePage::statsRequested);
     connect(m_storageButton, &QPushButton::clicked, this, &HomePage::storageRequested);
     connect(m_aiConfigButton, &QPushButton::clicked, this, &HomePage::aiConfigRequested);
     connect(m_logoutButton, &QPushButton::clicked, this, &HomePage::logoutRequested);
@@ -449,6 +469,8 @@ HomePage::HomePage(QWidget *parent)
             emit themeToggleRequested(!m_darkMode);
         });
     connect(m_collapsedFavoritesButton, &QPushButton::clicked, this, &HomePage::favoritesRequested);
+    connect(m_collapsedTasksButton, &QPushButton::clicked, this, &HomePage::tasksRequested);
+    connect(m_collapsedStatsButton, &QPushButton::clicked, this, &HomePage::statsRequested);
     connect(m_collapsedStorageButton, &QPushButton::clicked, this, &HomePage::storageRequested);
     connect(m_collapsedAiConfigButton, &QPushButton::clicked, this, &HomePage::aiConfigRequested);
     connect(m_collapsedLogoutButton, &QPushButton::clicked, this, &HomePage::logoutRequested);
@@ -496,6 +518,8 @@ void HomePage::setToolsExpanded(bool expanded)
         m_collapsedToolsPanel->setVisible(!expanded);
     }
     const QList<QPushButton *> iconButtons = {m_collapsedFavoritesButton,
+                                              m_collapsedTasksButton,
+                                              m_collapsedStatsButton,
                                               m_collapsedStorageButton,
                                               m_collapsedAiConfigButton,
                                               m_collapsedLogoutButton};

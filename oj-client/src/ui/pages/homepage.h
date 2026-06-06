@@ -33,6 +33,8 @@ signals:
     void classSelected(const QString &name, const QString &url);
     void refreshRequested();
     void favoritesRequested();
+    void tasksRequested();
+    void statsRequested();
     void storageRequested();
     void aiConfigRequested();
     void logoutRequested();
@@ -49,11 +51,15 @@ private:
     QWidget *m_toolsPanel = nullptr;
     QWidget *m_collapsedToolsPanel = nullptr;
     QPushButton *m_favoritesButton = nullptr;
+    QPushButton *m_tasksButton = nullptr;
+    QPushButton *m_statsButton = nullptr;
     QPushButton *m_storageButton = nullptr;
     QPushButton *m_aiConfigButton = nullptr;
     QPushButton *m_logoutButton = nullptr;
     QPushButton *m_themeButton = nullptr;
     QPushButton *m_collapsedFavoritesButton = nullptr;
+    QPushButton *m_collapsedTasksButton = nullptr;
+    QPushButton *m_collapsedStatsButton = nullptr;
     QPushButton *m_collapsedStorageButton = nullptr;
     QPushButton *m_collapsedAiConfigButton = nullptr;
     QPushButton *m_collapsedLogoutButton = nullptr;

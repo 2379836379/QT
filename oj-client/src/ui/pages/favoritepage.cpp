@@ -33,11 +33,19 @@ FavoritePage::FavoritePage(QWidget *parent)
     themeButton->setObjectName("favoriteTopActionButton");
     auto *refreshButton = new QPushButton("Refresh", topFrame);
     refreshButton->setObjectName("favoriteTopActionButton");
+    auto *exportButton = new QPushButton("Export", topFrame);
+    exportButton->setObjectName("favoriteTopActionButton");
+    exportButton->setToolTip("Export all favorite folders to a JSON file");
+    auto *importButton = new QPushButton("Import", topFrame);
+    importButton->setObjectName("favoriteTopActionButton");
+    importButton->setToolTip("Import favorite folders from a JSON file (merge)");
 
     topLayout->addWidget(titleLabel, 1);
     topLayout->addWidget(homeButton);
     topLayout->addWidget(themeButton);
     topLayout->addWidget(refreshButton);
+    topLayout->addWidget(exportButton);
+    topLayout->addWidget(importButton);
 
     auto *bottomLayout = new QHBoxLayout();
     bottomLayout->setSpacing(18);
@@ -256,6 +264,8 @@ FavoritePage::FavoritePage(QWidget *parent)
             setToolsExpanded(!m_toolsExpanded);
         });
     connect(refreshButton, &QPushButton::clicked, this, &FavoritePage::refreshRequested);
+    connect(exportButton, &QPushButton::clicked, this, &FavoritePage::exportRequested);
+    connect(importButton, &QPushButton::clicked, this, &FavoritePage::importRequested);
     auto *refreshShortcut = new QShortcut(QKeySequence(Qt::CTRL | Qt::Key_R), this);
     refreshShortcut->setContext(Qt::WidgetWithChildrenShortcut);
     connect(refreshShortcut, &QShortcut::activated, this, &FavoritePage::refreshRequested);

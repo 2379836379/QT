@@ -62,6 +62,56 @@ QString appStateOutputPath()
     return QDir(QDir::currentPath()).filePath("appstate.toml");
 }
 
+QString readAppStateRootString(const QString &targetKey)
+{
+    const QString loadedPath = appStateOutputPath();
+    if (!QFile::exists(loadedPath)) {
+        return QString();
+    }
+
+    QFile file(loadedPath);
+    if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        return QString();
+    }
+
+    const QString content = QString::fromUtf8(file.readAll());
+    QString currentSection;
+    const QRegularExpression sectionRegex("^\\s*\\[([^\\]]+)\\]\\s*$");
+    const QRegularExpression keyValueRegex("^\\s*([A-Za-z0-9_\\-]+)\\s*=\\s*(.*?)\\s*$");
+
+    const QStringList lines = content.split('\n');
+    for (QString line : lines) {
+        const int commentIndex = line.indexOf('#');
+        if (commentIndex >= 0) {
+            line = line.left(commentIndex);
+        }
+        if (line.trimmed().isEmpty()) {
+            continue;
+        }
+
+        const QRegularExpressionMatch sectionMatch = sectionRegex.match(line);
+        if (sectionMatch.hasMatch()) {
+            currentSection = sectionMatch.captured(1).trimmed().toLower();
+            continue;
+        }
+
+        if (!currentSection.isEmpty()) {
+            continue;
+        }
+
+        const QRegularExpressionMatch keyValueMatch = keyValueRegex.match(line);
+        if (!keyValueMatch.hasMatch()) {
+            continue;
+        }
+
+        if (keyValueMatch.captured(1).trimmed().toLower() == targetKey.toLower()) {
+            return unquoteTomlValue(keyValueMatch.captured(2));
+        }
+    }
+
+    return QString();
+}
+
 QString quoteTomlValue(QString text)
 {
     text.replace("\\", "\\\\");
@@ -287,6 +337,24 @@ QString AppConfig::loadRingPath()
     }
 
     return QString();
+}
+
+QString AppConfig::loadJudgerBaseUrl(const QString &defaultValue)
+{
+    const QString value = readAppStateRootString("judger_base_url").trimmed();
+    return value.isEmpty() ? defaultValue : value;
+}
+
+QString AppConfig::loadEmailVerifyUrl(const QString &defaultValue)
+{
+    const QString value = readAppStateRootString("email_verify_url").trimmed();
+    return value.isEmpty() ? defaultValue : value;
+}
+
+QString AppConfig::loadOpenJudgeBaseUrl(const QString &defaultValue)
+{
+    const QString value = readAppStateRootString("openjudge_base_url").trimmed();
+    return value.isEmpty() ? defaultValue : value;
 }
 
 bool AppConfig::loadAlarmEnabled(bool defaultValue)
