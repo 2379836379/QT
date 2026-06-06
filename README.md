@@ -404,7 +404,3 @@ oj-client/installer.iss
 - 继续完善 C++ / Python 语法高亮规则
 - 增加更多本地测试和评测信息展示策略
 - 补充自动化测试和 CI
-
-## 一句话描述
-
-`oj-client` 是一个集 OpenJudge 浏览、提交、本地测试、AI 辅助、收藏、提醒与安装发布于一体的 Qt 桌面做题客户端。
