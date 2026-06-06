@@ -2,6 +2,11 @@
 AppName=oj-client
 AppVersion=0.1.0
 DefaultDirName={autopf}\oj-client
+DisableDirPage=no
+UsePreviousAppDir=no
+CloseApplications=force
+CloseApplicationsFilter=oj.exe
+RestartApplications=no
 DefaultGroupName=oj-client
 OutputDir=installer-out
 OutputBaseFilename=oj-client-setup
@@ -41,6 +46,26 @@ Name: "{autodesktop}\oj-client"; Filename: "{app}\oj.exe"; IconFilename: "{app}\
 
 [Run]
 Filename: "{app}\oj.exe"; Description: "Launch oj-client"; Flags: nowait postinstall skipifsilent
+
+[UninstallDelete]
+Type: filesandordirs; Name: "{app}\cache"
+Type: filesandordirs; Name: "{app}\data"
+Type: filesandordirs; Name: "{app}\images"
+Type: filesandordirs; Name: "{app}\platforms"
+Type: filesandordirs; Name: "{app}\iconengines"
+Type: filesandordirs; Name: "{app}\imageformats"
+Type: filesandordirs; Name: "{app}\styles"
+Type: filesandordirs; Name: "{app}\sqldrivers"
+Type: filesandordirs; Name: "{app}\tls"
+Type: filesandordirs; Name: "{app}\networkinformation"
+Type: filesandordirs; Name: "{app}\multimedia"
+Type: filesandordirs; Name: "{app}\generic"
+Type: filesandordirs; Name: "{app}\qtwebview"
+Type: filesandordirs; Name: "{app}\translations"
+Type: filesandordirs; Name: "{app}\vedio"
+Type: files; Name: "{app}\*.dll"
+Type: files; Name: "{app}\*.exe"
+Type: files; Name: "{app}\*.toml"
 
 [Code]
 procedure CurStepChanged(CurStep: TSetupStep);

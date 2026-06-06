@@ -1,11 +1,20 @@
 cmake_minimum_required(VERSION 3.19)
 project(oj LANGUAGES C CXX)
 
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+
+if (MSVC)
+    add_compile_options(/Zc:__cplusplus)
+endif()
+
 find_package(Qt6 6.5 REQUIRED COMPONENTS Core Widgets Network Sql Multimedia)
 
 qt_standard_project_setup()
 
 qt_add_executable(oj
+    WIN32
     MACOSX_BUNDLE
     main.cpp
     resources.qrc
