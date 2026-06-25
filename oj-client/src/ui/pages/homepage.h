@@ -35,7 +35,9 @@ signals:
     void favoritesRequested();
     void tasksRequested();
     void statsRequested();
+    void reviewRequested();
     void storageRequested();
+    void settingsRequested();
     void aiConfigRequested();
     void logoutRequested();
     void themeToggleRequested(bool dark);
@@ -53,14 +55,18 @@ private:
     QPushButton *m_favoritesButton = nullptr;
     QPushButton *m_tasksButton = nullptr;
     QPushButton *m_statsButton = nullptr;
+    QPushButton *m_reviewButton = nullptr;
     QPushButton *m_storageButton = nullptr;
+    QPushButton *m_settingsButton = nullptr;
     QPushButton *m_aiConfigButton = nullptr;
     QPushButton *m_logoutButton = nullptr;
     QPushButton *m_themeButton = nullptr;
     QPushButton *m_collapsedFavoritesButton = nullptr;
     QPushButton *m_collapsedTasksButton = nullptr;
     QPushButton *m_collapsedStatsButton = nullptr;
+    QPushButton *m_collapsedReviewButton = nullptr;
     QPushButton *m_collapsedStorageButton = nullptr;
+    QPushButton *m_collapsedSettingsButton = nullptr;
     QPushButton *m_collapsedAiConfigButton = nullptr;
     QPushButton *m_collapsedLogoutButton = nullptr;
     QListWidget *m_reminderListWidget = nullptr;

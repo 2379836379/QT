@@ -1,5 +1,7 @@
 #include "service/meta/problemmetaservice.h"
 
+#include <QDateTime>
+
 ProblemMetaService::ProblemMetaService(ProblemMetaRepository *repository,
                                        QObject *parent)
     : QObject(parent)
@@ -35,6 +37,11 @@ bool ProblemMetaService::saveMeta(const ProblemMeta &meta)
     if (!m_repository->setTags(meta.problemUrl, meta.tags)) {
         emit failed(m_repository->lastError());
         return false;
+    }
+
+    if (meta.reviewFlag) {
+        m_repository->ensureReviewScheduled(
+            meta.problemUrl, QDateTime::currentDateTime().toString(Qt::ISODate));
     }
 
     emit metaSaved(meta);
@@ -94,6 +101,69 @@ QList<ProblemMeta> ProblemMetaService::reviewProblems() const
 int ProblemMetaService::notesCount() const
 {
     return m_repository == nullptr ? 0 : m_repository->notesCount();
+}
+
+QList<ProblemMeta> ProblemMetaService::dueReviewProblems() const
+{
+    if (m_repository == nullptr) {
+        return QList<ProblemMeta>();
+    }
+    return m_repository->dueReviewProblems(
+        QDateTime::currentDateTime().toString(Qt::ISODate));
+}
+
+int ProblemMetaService::dueReviewCount() const
+{
+    if (m_repository == nullptr) {
+        return 0;
+    }
+    return m_repository->dueReviewCount(
+        QDateTime::currentDateTime().toString(Qt::ISODate));
+}
+
+bool ProblemMetaService::gradeReview(const QString &problemUrl, int grade)
+{
+    if (m_repository == nullptr) {
+        emit failed("Problem meta repository not available");
+        return false;
+    }
+
+    ProblemMeta meta;
+    if (!m_repository->loadMeta(problemUrl, &meta)) {
+        emit failed("Problem not found for review grading");
+        return false;
+    }
+
+    // Simplified SM-2: grade 0=Again, 1=Hard, 2=Good, 3=Easy.
+    int interval = meta.reviewInterval;
+    int ease = meta.reviewEase;
+
+    if (grade <= 0) {
+        interval = 0;
+        ease = qMax(130, ease - 20);
+    } else if (grade == 1) {
+        ease = qMax(130, ease - 15);
+        interval = interval <= 0 ? 1 : qMax(1, (interval * 120 + 50) / 100);
+    } else if (grade == 2) {
+        interval = interval <= 0 ? 1 : qMax(1, (interval * ease + 50) / 100);
+    } else {
+        ease = ease + 15;
+        interval = interval <= 0 ? 2 : qMax(1, (interval * ease * 13 + 500) / 1000);
+    }
+
+    const QDateTime now = QDateTime::currentDateTime();
+    const QString nextReviewAt = now.addDays(interval).toString(Qt::ISODate);
+
+    if (!m_repository->updateReviewSchedule(problemUrl,
+                                            interval,
+                                            ease,
+                                            nextReviewAt,
+                                            now.toString(Qt::ISODate),
+                                            meta.reviewCount + 1)) {
+        emit failed(m_repository->lastError());
+        return false;
+    }
+    return true;
 }
 
 QString ProblemMetaService::lastError() const

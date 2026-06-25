@@ -26,6 +26,9 @@ public:
     QHash<QString, int> tagCounts() const;
     QList<ProblemMeta> reviewProblems() const;
     int notesCount() const;
+    QList<ProblemMeta> dueReviewProblems() const;
+    int dueReviewCount() const;
+    bool gradeReview(const QString &problemUrl, int grade);
     QString lastError() const;
 
 signals:

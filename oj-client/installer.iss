@@ -47,6 +47,10 @@ Name: "{autodesktop}\oj-client"; Filename: "{app}\oj.exe"; IconFilename: "{app}\
 [Run]
 Filename: "{app}\oj.exe"; Description: "Launch oj-client"; Flags: nowait postinstall skipifsilent
 
+; Note: appstate.toml is no longer generated here. The application creates it in
+; the per-user data directory on first run, with ring_path pointing to the
+; bundled ringtone under {app}\vedio.
+
 [UninstallDelete]
 Type: filesandordirs; Name: "{app}\cache"
 Type: filesandordirs; Name: "{app}\data"
@@ -66,20 +70,3 @@ Type: filesandordirs; Name: "{app}\vedio"
 Type: files; Name: "{app}\*.dll"
 Type: files; Name: "{app}\*.exe"
 Type: files; Name: "{app}\*.toml"
-
-[Code]
-procedure CurStepChanged(CurStep: TSetupStep);
-var
-  AppStatePath: string;
-  RingPath: string;
-  Content: string;
-begin
-  if CurStep <> ssPostInstall then
-    exit;
-
-  AppStatePath := ExpandConstant('{app}\appstate.toml');
-  RingPath := ExpandConstant('{app}\vedio\哈基米起床 - MyRingtone.mp3');
-  Content := 'ring_path = "' + RingPath + '"' + #13#10;
-
-  SaveStringToFile(AppStatePath, Content, False);
-end;

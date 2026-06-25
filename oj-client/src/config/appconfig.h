@@ -23,6 +23,9 @@ public:
     static QString loadOpenJudgeBaseUrl(const QString &defaultValue);
     static QString loadConfigText(QString *sourcePath = nullptr);
     static bool saveAlarmEnabled(bool enabled, QString *errorMessage = nullptr);
+    static bool saveOpenJudgeBaseUrl(const QString &value, QString *errorMessage = nullptr);
+    static bool saveJudgerBaseUrl(const QString &value, QString *errorMessage = nullptr);
+    static bool saveEmailVerifyUrl(const QString &value, QString *errorMessage = nullptr);
     static bool saveOpenAiConfig(const OpenAiConfig &config, QString *errorMessage = nullptr);
     static bool saveRingPath(const QString &path, QString *errorMessage = nullptr);
     static bool saveConfigText(const QString &content,

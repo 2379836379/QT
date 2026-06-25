@@ -16,6 +16,11 @@ struct ProblemMeta
     QString deadline;
     bool reviewFlag = false;
     QStringList tags;
+    int reviewInterval = 0;   // current spaced-repetition interval in days
+    int reviewEase = 250;     // ease factor x100 (SM-2 style)
+    QString nextReviewAt;     // ISO local datetime, empty = not scheduled
+    QString lastReviewedAt;   // ISO local datetime of last grading
+    int reviewCount = 0;      // number of completed reviews
 };
 
 class QSqlQuery;
@@ -37,11 +42,21 @@ public:
     QHash<QString, int> tagCounts() const;
     QList<ProblemMeta> reviewProblems() const;
     int notesCount() const;
+    QList<ProblemMeta> dueReviewProblems(const QString &nowIso) const;
+    int dueReviewCount(const QString &nowIso) const;
+    bool updateReviewSchedule(const QString &problemUrl,
+                              int interval,
+                              int ease,
+                              const QString &nextReviewAt,
+                              const QString &lastReviewedAt,
+                              int reviewCount);
+    bool ensureReviewScheduled(const QString &problemUrl, const QString &nowIso);
     QString lastError() const;
 
 private:
     bool openDatabase();
     bool ensureSchema();
+    void ensureReviewColumns();
     ProblemMeta readMeta(const QSqlQuery &query) const;
 
     QString m_connectionName;

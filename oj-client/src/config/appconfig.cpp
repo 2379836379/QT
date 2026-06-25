@@ -1,8 +1,11 @@
 #include "config/appconfig.h"
 
+#include "config/apppaths.h"
+
 #include <QCoreApplication>
 #include <QDir>
 #include <QFile>
+#include <QFileInfo>
 #include <QHash>
 #include <QRegularExpression>
 #include <QStringList>
@@ -22,44 +25,17 @@ QString unquoteTomlValue(const QString &value)
 
 QStringList candidateConfigPaths()
 {
-    const QString appDir = QCoreApplication::applicationDirPath();
-    const QString cwd = QDir::currentPath();
-    return {
-        QDir(cwd).filePath("config.toml"),
-        QDir(appDir).filePath("config.toml"),
-        QDir(appDir).filePath("../config.toml"),
-        QDir(appDir).filePath("../oj-client/config.toml"),
-        QDir(appDir).filePath("../../oj-client/config.toml")
-    };
+    return {AppPaths::configFilePath()};
 }
 
 QString configOutputPath()
 {
-    for (const QString &path : candidateConfigPaths()) {
-        if (QFile::exists(path)) {
-            return QDir::cleanPath(path);
-        }
-    }
-    return QDir(QDir::currentPath()).filePath("config.toml");
+    return AppPaths::configFilePath();
 }
 
 QString appStateOutputPath()
 {
-    const QString appDir = QCoreApplication::applicationDirPath();
-    const QString cwd = QDir::currentPath();
-    const QStringList candidates = {
-        QDir(cwd).filePath("appstate.toml"),
-        QDir(appDir).filePath("appstate.toml"),
-        QDir(appDir).filePath("../appstate.toml"),
-        QDir(appDir).filePath("../oj-client/appstate.toml"),
-        QDir(appDir).filePath("../../oj-client/appstate.toml")
-    };
-    for (const QString &path : candidates) {
-        if (QFile::exists(path)) {
-            return QDir::cleanPath(path);
-        }
-    }
-    return QDir(QDir::currentPath()).filePath("appstate.toml");
+    return AppPaths::appStateFilePath();
 }
 
 QString readAppStateRootString(const QString &targetKey)
@@ -165,6 +141,40 @@ QString updateOrAppendRootKey(const QString &content,
     }
 
     return output.join('\n');
+}
+
+bool writeAppStateRootKey(const QString &key, const QString &value, QString *errorMessage)
+{
+    const QString savedPath = appStateOutputPath();
+    QDir().mkpath(QFileInfo(savedPath).absolutePath());
+
+    QString content;
+    QFile inputFile(savedPath);
+    if (inputFile.exists()) {
+        if (!inputFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
+            if (errorMessage != nullptr) {
+                *errorMessage = QString("Failed to read appstate.toml: %1")
+                                    .arg(inputFile.errorString());
+            }
+            return false;
+        }
+        content = QString::fromUtf8(inputFile.readAll());
+        inputFile.close();
+    }
+
+    const QString updatedContent = updateOrAppendRootKey(content, key, quoteTomlValue(value));
+
+    QFile outputFile(savedPath);
+    if (!outputFile.open(QIODevice::WriteOnly | QIODevice::Text | QIODevice::Truncate)) {
+        if (errorMessage != nullptr) {
+            *errorMessage = QString("Failed to write appstate.toml: %1")
+                                .arg(outputFile.errorString());
+        }
+        return false;
+    }
+    outputFile.write(updatedContent.toUtf8());
+    outputFile.close();
+    return true;
 }
 }
 
@@ -541,6 +551,21 @@ bool AppConfig::saveAlarmEnabled(bool enabled, QString *errorMessage)
     outputFile.write(updatedContent.toUtf8());
     outputFile.close();
     return true;
+}
+
+bool AppConfig::saveOpenJudgeBaseUrl(const QString &value, QString *errorMessage)
+{
+    return writeAppStateRootKey("openjudge_base_url", value.trimmed(), errorMessage);
+}
+
+bool AppConfig::saveJudgerBaseUrl(const QString &value, QString *errorMessage)
+{
+    return writeAppStateRootKey("judger_base_url", value.trimmed(), errorMessage);
+}
+
+bool AppConfig::saveEmailVerifyUrl(const QString &value, QString *errorMessage)
+{
+    return writeAppStateRootKey("email_verify_url", value.trimmed(), errorMessage);
 }
 
 bool AppConfig::saveConfigText(const QString &content,

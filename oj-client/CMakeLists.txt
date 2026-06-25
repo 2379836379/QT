@@ -44,10 +44,16 @@ qt_add_executable(oj
     src/ui/pages/taskboardpage.h
     src/ui/pages/statspage.cpp
     src/ui/pages/statspage.h
+    src/ui/pages/reviewpage.cpp
+    src/ui/pages/reviewpage.h
+    src/ui/pages/settingspage.cpp
+    src/ui/pages/settingspage.h
     src/ui/pages/storagepage.cpp
     src/ui/pages/storagepage.h
     src/config/appconfig.cpp
     src/config/appconfig.h
+    src/config/apppaths.cpp
+    src/config/apppaths.h
     src/network/cookiestore.cpp
     src/network/cookiestore.h
     src/network/openaiclient.cpp

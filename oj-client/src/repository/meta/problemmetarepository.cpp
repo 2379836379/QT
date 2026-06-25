@@ -1,34 +1,23 @@
 #include "problemmetarepository.h"
 
+#include "config/apppaths.h"
+
 #include <QCoreApplication>
 #include <QDir>
+#include <QList>
+#include <QPair>
 #include <QSqlDatabase>
 #include <QSqlError>
 #include <QSqlQuery>
+#include <QStringList>
 #include <QUuid>
 #include <QVariant>
 
 namespace
 {
-QDir projectRootDir()
-{
-    QDir dir(QCoreApplication::applicationDirPath());
-    if (dir.dirName().compare("build", Qt::CaseInsensitive) == 0) {
-        dir.cdUp();
-    } else if ((dir.dirName().compare("debug", Qt::CaseInsensitive) == 0
-                || dir.dirName().compare("release", Qt::CaseInsensitive) == 0)
-               && dir.cdUp()
-               && dir.dirName().compare("build", Qt::CaseInsensitive) == 0) {
-        dir.cdUp();
-    }
-    return dir;
-}
-
 QString databasePath()
 {
-    QDir dir(projectRootDir().filePath("data"));
-    dir.mkpath(".");
-    return dir.filePath("problemmeta.db");
+    return QDir(AppPaths::dataDir()).filePath("problemmeta.db");
 }
 }
 
@@ -97,7 +86,37 @@ bool ProblemMetaRepository::ensureSchema()
         return false;
     }
 
+    ensureReviewColumns();
     return true;
+}
+
+void ProblemMetaRepository::ensureReviewColumns()
+{
+    QSqlDatabase database = QSqlDatabase::database(m_connectionName);
+
+    QStringList existing;
+    QSqlQuery info(database);
+    if (info.exec("PRAGMA table_info(problem_meta)")) {
+        while (info.next()) {
+            existing << info.value(1).toString();
+        }
+    }
+
+    const QList<QPair<QString, QString>> columns = {
+        {"review_interval", "INTEGER DEFAULT 0"},
+        {"review_ease", "INTEGER DEFAULT 250"},
+        {"next_review_at", "TEXT"},
+        {"last_reviewed_at", "TEXT"},
+        {"review_count", "INTEGER DEFAULT 0"}};
+
+    for (const auto &column : columns) {
+        if (existing.contains(column.first)) {
+            continue;
+        }
+        QSqlQuery alter(database);
+        alter.exec(QString("ALTER TABLE problem_meta ADD COLUMN %1 %2")
+                       .arg(column.first, column.second));
+    }
 }
 
 bool ProblemMetaRepository::upsertMeta(const ProblemMeta &meta)
@@ -150,7 +169,8 @@ bool ProblemMetaRepository::loadMeta(const QString &problemUrl, ProblemMeta *met
 
     QSqlQuery query(QSqlDatabase::database(m_connectionName));
     query.prepare(
-        "SELECT problem_url, title, note, difficulty, task_status, priority, deadline, review_flag "
+        "SELECT problem_url, title, note, difficulty, task_status, priority, deadline, review_flag, "
+        "review_interval, review_ease, next_review_at, last_reviewed_at, review_count "
         "FROM problem_meta WHERE problem_url = :problem_url");
     query.bindValue(":problem_url", problemUrl.trimmed());
     if (!query.exec() || !query.next()) {
@@ -173,7 +193,8 @@ QList<ProblemMeta> ProblemMetaRepository::loadAllMeta() const
 
     QSqlQuery query(QSqlDatabase::database(m_connectionName));
     if (!query.exec(
-            "SELECT problem_url, title, note, difficulty, task_status, priority, deadline, review_flag "
+            "SELECT problem_url, title, note, difficulty, task_status, priority, deadline, review_flag, "
+            "review_interval, review_ease, next_review_at, last_reviewed_at, review_count "
             "FROM problem_meta ORDER BY updated_at DESC")) {
         return result;
     }
@@ -334,7 +355,8 @@ QList<ProblemMeta> ProblemMetaRepository::reviewProblems() const
 
     QSqlQuery query(QSqlDatabase::database(m_connectionName));
     if (!query.exec(
-            "SELECT problem_url, title, note, difficulty, task_status, priority, deadline, review_flag "
+            "SELECT problem_url, title, note, difficulty, task_status, priority, deadline, review_flag, "
+            "review_interval, review_ease, next_review_at, last_reviewed_at, review_count "
             "FROM problem_meta WHERE review_flag = 1 ORDER BY updated_at DESC")) {
         return result;
     }
@@ -359,6 +381,103 @@ int ProblemMetaRepository::notesCount() const
         return 0;
     }
     return query.value(0).toInt();
+}
+
+QList<ProblemMeta> ProblemMetaRepository::dueReviewProblems(const QString &nowIso) const
+{
+    QList<ProblemMeta> result;
+    if (!QSqlDatabase::contains(m_connectionName)) {
+        return result;
+    }
+
+    QSqlQuery query(QSqlDatabase::database(m_connectionName));
+    query.prepare(
+        "SELECT problem_url, title, note, difficulty, task_status, priority, deadline, review_flag, "
+        "review_interval, review_ease, next_review_at, last_reviewed_at, review_count "
+        "FROM problem_meta "
+        "WHERE review_flag = 1 AND next_review_at IS NOT NULL AND next_review_at <> '' "
+        "AND next_review_at <= :now "
+        "ORDER BY next_review_at ASC");
+    query.bindValue(":now", nowIso);
+    if (!query.exec()) {
+        return result;
+    }
+    while (query.next()) {
+        ProblemMeta meta = readMeta(query);
+        meta.tags = loadTags(meta.problemUrl);
+        result << meta;
+    }
+    return result;
+}
+
+int ProblemMetaRepository::dueReviewCount(const QString &nowIso) const
+{
+    if (!QSqlDatabase::contains(m_connectionName)) {
+        return 0;
+    }
+
+    QSqlQuery query(QSqlDatabase::database(m_connectionName));
+    query.prepare(
+        "SELECT COUNT(*) FROM problem_meta "
+        "WHERE review_flag = 1 AND next_review_at IS NOT NULL AND next_review_at <> '' "
+        "AND next_review_at <= :now");
+    query.bindValue(":now", nowIso);
+    if (!query.exec() || !query.next()) {
+        return 0;
+    }
+    return query.value(0).toInt();
+}
+
+bool ProblemMetaRepository::updateReviewSchedule(const QString &problemUrl,
+                                                 int interval,
+                                                 int ease,
+                                                 const QString &nextReviewAt,
+                                                 const QString &lastReviewedAt,
+                                                 int reviewCount)
+{
+    if (!openDatabase()) {
+        return false;
+    }
+
+    QSqlQuery query(QSqlDatabase::database(m_connectionName));
+    query.prepare(
+        "UPDATE problem_meta SET "
+        "review_interval = :interval, review_ease = :ease, next_review_at = :next, "
+        "last_reviewed_at = :last, review_count = :count "
+        "WHERE problem_url = :problem_url");
+    query.bindValue(":interval", interval);
+    query.bindValue(":ease", ease);
+    query.bindValue(":next", nextReviewAt);
+    query.bindValue(":last", lastReviewedAt);
+    query.bindValue(":count", reviewCount);
+    query.bindValue(":problem_url", problemUrl.trimmed());
+    if (!query.exec()) {
+        m_lastError = query.lastError().text();
+        return false;
+    }
+    return true;
+}
+
+bool ProblemMetaRepository::ensureReviewScheduled(const QString &problemUrl,
+                                                  const QString &nowIso)
+{
+    if (!openDatabase()) {
+        return false;
+    }
+
+    QSqlQuery query(QSqlDatabase::database(m_connectionName));
+    query.prepare(
+        "UPDATE problem_meta SET "
+        "next_review_at = :now, review_interval = 0, review_ease = 250, review_count = 0 "
+        "WHERE problem_url = :problem_url AND review_flag = 1 "
+        "AND (next_review_at IS NULL OR next_review_at = '')");
+    query.bindValue(":now", nowIso);
+    query.bindValue(":problem_url", problemUrl.trimmed());
+    if (!query.exec()) {
+        m_lastError = query.lastError().text();
+        return false;
+    }
+    return true;
 }
 
 QString ProblemMetaRepository::lastError() const
@@ -402,5 +521,10 @@ ProblemMeta ProblemMetaRepository::readMeta(const QSqlQuery &query) const
     meta.priority = query.value(5).toInt();
     meta.deadline = query.value(6).toString();
     meta.reviewFlag = query.value(7).toInt() != 0;
+    meta.reviewInterval = query.value(8).toInt();
+    meta.reviewEase = query.value(9).toInt();
+    meta.nextReviewAt = query.value(10).toString();
+    meta.lastReviewedAt = query.value(11).toString();
+    meta.reviewCount = query.value(12).toInt();
     return meta;
 }

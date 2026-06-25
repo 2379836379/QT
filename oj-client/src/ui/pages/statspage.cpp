@@ -1,12 +1,14 @@
 #include "ui/pages/statspage.h"
 #include "ui/lightmodeiconhelper.h"
 
+#include <QComboBox>
 #include <QFrame>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QListWidget>
 #include <QListWidgetItem>
 #include <QPushButton>
+#include <QSignalBlocker>
 #include <QVBoxLayout>
 
 #include <algorithm>
@@ -85,10 +87,35 @@ StatsPage::StatsPage(QWidget *parent)
     reviewOuter->setSpacing(12);
     m_reviewLabel = new QLabel("错题本", reviewFrame);
     m_reviewLabel->setObjectName("statsSectionLabel");
+
+    auto *reviewFilterLayout = new QHBoxLayout();
+    reviewFilterLayout->setSpacing(8);
+    auto *reviewTagLabel = new QLabel("标签", reviewFrame);
+    reviewTagLabel->setObjectName("statFilterLabel");
+    m_reviewTagFilter = new QComboBox(reviewFrame);
+    m_reviewTagFilter->setObjectName("statFilterCombo");
+    m_reviewTagFilter->addItem("全部标签", QString());
+    auto *reviewDifficultyLabel = new QLabel("难度", reviewFrame);
+    reviewDifficultyLabel->setObjectName("statFilterLabel");
+    m_reviewDifficultyFilter = new QComboBox(reviewFrame);
+    m_reviewDifficultyFilter->setObjectName("statFilterCombo");
+    m_reviewDifficultyFilter->addItem("全部难度", -1);
+    m_reviewDifficultyFilter->addItem("未设置", 0);
+    for (int level = 1; level <= 5; ++level) {
+        m_reviewDifficultyFilter->addItem(QString::number(level), level);
+    }
+    reviewFilterLayout->addWidget(reviewTagLabel);
+    reviewFilterLayout->addWidget(m_reviewTagFilter);
+    reviewFilterLayout->addSpacing(8);
+    reviewFilterLayout->addWidget(reviewDifficultyLabel);
+    reviewFilterLayout->addWidget(m_reviewDifficultyFilter);
+    reviewFilterLayout->addStretch();
+
     m_reviewList = new QListWidget(reviewFrame);
     m_reviewList->setObjectName("statsReviewList");
     m_reviewList->setMinimumHeight(360);
     reviewOuter->addWidget(m_reviewLabel);
+    reviewOuter->addLayout(reviewFilterLayout);
     reviewOuter->addWidget(m_reviewList, 1);
 
     bottomLayout->addWidget(summaryFrame, 1);
@@ -145,7 +172,16 @@ StatsPage::StatsPage(QWidget *parent)
         "  margin: 2px 0px;"
         "}"
         "#statsReviewList::item:selected { background: #dcefea; color: #12343b; }"
-        "#statsReviewList::item:hover { background: #eef4ef; }");
+        "#statsReviewList::item:hover { background: #eef4ef; }"
+        "#statFilterLabel { color: #2f3a33; }"
+        "#statFilterCombo {"
+        "  padding: 4px 8px;"
+        "  border: 1px solid #ded8cc;"
+        "  border-radius: 8px;"
+        "  background: #fbfaf7;"
+        "  color: #2f3a33;"
+        "  min-width: 90px;"
+        "}");
 
     connect(homeButton, &QPushButton::clicked, this, &StatsPage::homeRequested);
     connect(refreshButton, &QPushButton::clicked, this, &StatsPage::refreshRequested);
@@ -159,6 +195,10 @@ StatsPage::StatsPage(QWidget *parent)
         emit problemSelected(item->data(ProblemTitleRole).toString(),
                              item->data(ProblemUrlRole).toString());
     });
+    connect(m_reviewTagFilter, &QComboBox::currentIndexChanged, this,
+            [this](int) { renderReview(); });
+    connect(m_reviewDifficultyFilter, &QComboBox::currentIndexChanged, this,
+            [this](int) { renderReview(); });
 }
 
 void StatsPage::clearLayout(QVBoxLayout *layout)
@@ -278,8 +318,58 @@ void StatsPage::showStats(const QHash<QString, int> &statusCounts,
     addStatRow(m_summaryLayout, "笔记数量", notesCount, otherMax);
     addStatRow(m_summaryLayout, "收藏题数", favoriteTotal, otherMax);
 
+    m_reviewProblems = reviewProblems;
+    rebuildReviewTagOptions();
+    renderReview();
+}
+
+void StatsPage::rebuildReviewTagOptions()
+{
+    if (m_reviewTagFilter == nullptr) {
+        return;
+    }
+
+    const QString current = m_reviewTagFilter->currentData().toString();
+    QStringList tags;
+    for (const ProblemMeta &meta : m_reviewProblems) {
+        for (const QString &tag : meta.tags) {
+            if (!tags.contains(tag, Qt::CaseInsensitive)) {
+                tags << tag;
+            }
+        }
+    }
+    tags.sort(Qt::CaseInsensitive);
+
+    const QSignalBlocker blocker(m_reviewTagFilter);
+    m_reviewTagFilter->clear();
+    m_reviewTagFilter->addItem("全部标签", QString());
+    for (const QString &tag : tags) {
+        m_reviewTagFilter->addItem(tag, tag);
+    }
+    const int index = m_reviewTagFilter->findData(current);
+    m_reviewTagFilter->setCurrentIndex(index >= 0 ? index : 0);
+}
+
+void StatsPage::renderReview()
+{
+    if (m_reviewList == nullptr) {
+        return;
+    }
+
+    const QString tagFilter =
+        m_reviewTagFilter != nullptr ? m_reviewTagFilter->currentData().toString() : QString();
+    const int difficultyFilter =
+        m_reviewDifficultyFilter != nullptr ? m_reviewDifficultyFilter->currentData().toInt() : -1;
+
     m_reviewList->clear();
-    for (const ProblemMeta &meta : reviewProblems) {
+    int shown = 0;
+    for (const ProblemMeta &meta : m_reviewProblems) {
+        if (!tagFilter.isEmpty() && !meta.tags.contains(tagFilter, Qt::CaseInsensitive)) {
+            continue;
+        }
+        if (difficultyFilter >= 0 && meta.difficulty != difficultyFilter) {
+            continue;
+        }
         const QString displayText = meta.title.isEmpty() ? meta.problemUrl : meta.title;
         auto *item = new QListWidgetItem(displayText, m_reviewList);
         item->setData(ProblemUrlRole, meta.problemUrl);
@@ -287,8 +377,9 @@ void StatsPage::showStats(const QHash<QString, int> &statusCounts,
         if (!meta.tags.isEmpty()) {
             item->setToolTip(meta.tags.join(", "));
         }
+        ++shown;
     }
-    m_reviewLabel->setText(QString("错题本 (%1)").arg(reviewProblems.size()));
+    m_reviewLabel->setText(QString("错题本 (%1/%2)").arg(shown).arg(m_reviewProblems.size()));
 }
 
 void StatsPage::setDarkMode(bool dark)
@@ -319,7 +410,13 @@ void StatsPage::setDarkMode(bool dark)
         "#statBarRest { background: #2c3844; }"
         "#statsReviewList { color: #e8edf2; }"
         "#statsReviewList::item:selected { background: #234257; color: #eff8ff; }"
-        "#statsReviewList::item:hover { background: #26313c; }";
+        "#statsReviewList::item:hover { background: #26313c; }"
+        "#statFilterLabel { color: #d9e1e8; }"
+        "#statFilterCombo {"
+        "  border: 1px solid #2c3844;"
+        "  background: #1b232c;"
+        "  color: #e8edf2;"
+        "}";
 
     setStyleSheet(dark ? lightStyle + darkOverride : lightStyle);
 }

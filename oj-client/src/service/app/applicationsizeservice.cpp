@@ -1,5 +1,7 @@
 #include "service/app/applicationsizeservice.h"
 
+#include "config/apppaths.h"
+
 #include <QCoreApplication>
 #include <QDir>
 #include <QDirIterator>
@@ -30,7 +32,10 @@ ApplicationSizeService::ApplicationSizeService(QObject *parent)
 qint64 ApplicationSizeService::totalApplicationSizeBytes() const
 {
     m_lastError.clear();
-    return directorySizeBytes(projectRootDir().absolutePath());
+    // Install directory (binaries/resources) plus the per-user data directory
+    // (databases, caches, toml) which now lives outside the install location.
+    return directorySizeBytes(projectRootDir().absolutePath())
+           + directorySizeBytes(AppPaths::baseDir());
 }
 
 QString ApplicationSizeService::formattedTotalApplicationSize() const

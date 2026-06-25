@@ -2,6 +2,7 @@
 #include "ui_mainwindow.h"
 
 #include "config/appconfig.h"
+#include "config/apppaths.h"
 #include "network/cookiestore.h"
 #include "network/openaiclient.h"
 #include "network/openjudgeclient.h"
@@ -41,10 +42,12 @@
 #include "ui/pages/favoritepage.h"
 #include "ui/pages/taskboardpage.h"
 #include "ui/pages/statspage.h"
+#include "ui/pages/reviewpage.h"
 #include "ui/pages/homepage.h"
 #include "ui/lightmodeiconhelper.h"
 #include "ui/pages/loginpage.h"
 #include "ui/pages/problempage.h"
+#include "ui/pages/settingspage.h"
 #include "ui/pages/storagepage.h"
 
 #include <QAction>
@@ -355,13 +358,7 @@ QString formatResultPageSummary(const ResultPageInfo &resultPageInfo)
 
 void writeStartupLog(const QString &message)
 {
-    QDir dir(QCoreApplication::applicationDirPath());
-    if (dir.dirName().compare("build", Qt::CaseInsensitive) == 0) {
-        dir.cdUp();
-    }
-    dir.mkpath("data");
-
-    QFile file(dir.filePath("data/startup.log"));
+    QFile file(QDir(AppPaths::dataDir()).filePath("startup.log"));
     if (!file.open(QIODevice::Append | QIODevice::Text)) {
         return;
     }
@@ -373,13 +370,7 @@ void writeStartupLog(const QString &message)
 
 void clearStartupLog()
 {
-    QDir dir(QCoreApplication::applicationDirPath());
-    if (dir.dirName().compare("build", Qt::CaseInsensitive) == 0) {
-        dir.cdUp();
-    }
-    dir.mkpath("data");
-
-    QFile file(dir.filePath("data/startup.log"));
+    QFile file(QDir(AppPaths::dataDir()).filePath("startup.log"));
     if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate | QIODevice::Text)) {
         return;
     }
@@ -611,8 +602,12 @@ void MainWindow::setupUiState()
     writeStartupLog("MainWindow: task board page created");
     m_statsPage = new StatsPage(this);
     writeStartupLog("MainWindow: stats page created");
+    m_reviewPage = new ReviewPage(this);
+    writeStartupLog("MainWindow: review page created");
     m_storagePage = new StoragePage(this);
     writeStartupLog("MainWindow: storage page created");
+    m_settingsPage = new SettingsPage(this);
+    writeStartupLog("MainWindow: settings page created");
 
     ui->pageStack->addWidget(m_loginPage);
     ui->pageStack->addWidget(m_homePage);
@@ -623,7 +618,9 @@ void MainWindow::setupUiState()
     ui->pageStack->addWidget(m_favoritePage);
     ui->pageStack->addWidget(m_taskBoardPage);
     ui->pageStack->addWidget(m_statsPage);
+    ui->pageStack->addWidget(m_reviewPage);
     ui->pageStack->addWidget(m_storagePage);
+    ui->pageStack->addWidget(m_settingsPage);
     writeStartupLog("MainWindow: pages added to stack");
 
     m_problemPage->setAiConfigSummary(m_aiConfigSummary);
@@ -865,6 +862,9 @@ void MainWindow::connectSignals()
     connect(m_aiConfigPage, &AiConfigPage::themeToggleRequested, this, [this](bool dark) {
         applyDarkMode(dark);
     });
+    connect(m_settingsPage, &SettingsPage::themeToggleRequested, this, [this](bool dark) {
+        applyDarkMode(dark);
+    });
     connect(
         m_homePage,
         &HomePage::classSelected,
@@ -907,6 +907,14 @@ void MainWindow::connectSignals()
         });
     connect(
         m_homePage,
+        &HomePage::reviewRequested,
+        this,
+        [this]() {
+            m_reviewPage->showDue(m_problemMetaService->dueReviewProblems());
+            pushPage(m_reviewPage);
+        });
+    connect(
+        m_homePage,
         &HomePage::refreshRequested,
         this,
         [this]() {
@@ -936,6 +944,17 @@ void MainWindow::connectSignals()
             const QString configText = AppConfig::loadConfigText(&configPath);
             m_aiConfigPage->setConfigText(configPath, configText);
             pushPage(m_aiConfigPage);
+        });
+    connect(
+        m_homePage,
+        &HomePage::settingsRequested,
+        this,
+        [this]() {
+            m_settingsPage->setUrls(
+                AppConfig::loadOpenJudgeBaseUrl("http://openjudge.cn"),
+                AppConfig::loadJudgerBaseUrl("http://10.129.240.62:18080"),
+                AppConfig::loadEmailVerifyUrl("http://10.129.240.62:8080"));
+            pushPage(m_settingsPage);
         });
     connect(
         m_homePage,
@@ -1352,6 +1371,33 @@ void MainWindow::connectSignals()
         [this](const QString &title, const QString &url) {
             openProblemPage(url, title, true);
         });
+    connect(m_reviewPage, &ReviewPage::homeRequested, this, [this]() {
+        showRootPage(m_homePage);
+    });
+    connect(m_reviewPage, &ReviewPage::themeToggleRequested, this, [this](bool dark) {
+        applyDarkMode(dark);
+    });
+    connect(m_reviewPage, &ReviewPage::refreshRequested, this, [this]() {
+        m_reviewPage->showDue(m_problemMetaService->dueReviewProblems());
+    });
+    connect(
+        m_reviewPage,
+        &ReviewPage::problemSelected,
+        this,
+        [this](const QString &title, const QString &url) {
+            openProblemPage(url, title, true);
+        });
+    connect(
+        m_reviewPage,
+        &ReviewPage::gradeRequested,
+        this,
+        [this](const QString &url, int grade) {
+            if (url.isEmpty()) {
+                return;
+            }
+            m_problemMetaService->gradeReview(url, grade);
+            m_reviewPage->showDue(m_problemMetaService->dueReviewProblems());
+        });
     connect(m_storagePage, &StoragePage::backRequested, this, &MainWindow::popPage);
     connect(m_storagePage, &StoragePage::homeRequested, this, [this]() {
         showRootPage(m_homePage);
@@ -1381,6 +1427,36 @@ void MainWindow::connectSignals()
                                          savedConfig.model);
             m_problemPage->setAiConfigSummary(m_aiConfigSummary);
             m_aiConfigPage->showSaveSucceeded(savedPath);
+        });
+    connect(m_settingsPage, &SettingsPage::backRequested, this, &MainWindow::popPage);
+    connect(m_settingsPage, &SettingsPage::homeRequested, this, [this]() {
+        showRootPage(m_homePage);
+    });
+    connect(
+        m_settingsPage,
+        &SettingsPage::saveRequested,
+        this,
+        [this](const QString &openJudgeUrl,
+               const QString &judgerUrl,
+               const QString &emailVerifyUrl) {
+            QString errorMessage;
+            if (!AppConfig::saveOpenJudgeBaseUrl(openJudgeUrl, &errorMessage)
+                || !AppConfig::saveJudgerBaseUrl(judgerUrl, &errorMessage)
+                || !AppConfig::saveEmailVerifyUrl(emailVerifyUrl, &errorMessage)) {
+                m_settingsPage->showSaveFailed(errorMessage);
+                return;
+            }
+            // Live apply; empty fields fall back to the same defaults used at startup.
+            const QString effectiveOpenJudge =
+                openJudgeUrl.isEmpty() ? QStringLiteral("http://openjudge.cn") : openJudgeUrl;
+            const QString effectiveJudger =
+                judgerUrl.isEmpty() ? QStringLiteral("http://10.129.240.62:18080") : judgerUrl;
+            const QString effectiveEmailVerify =
+                emailVerifyUrl.isEmpty() ? QStringLiteral("http://10.129.240.62:8080") : emailVerifyUrl;
+            m_client->setBaseUrl(effectiveOpenJudge);
+            m_client->setJudgerBaseUrl(effectiveJudger);
+            m_emailVerifyService->setBaseUrl(QUrl(effectiveEmailVerify));
+            m_settingsPage->showSaveSucceeded();
         });
     connect(
         m_storagePage,
@@ -1957,9 +2033,17 @@ void MainWindow::applyDarkMode(bool dark)
         m_statsPage->setDarkMode(dark);
         LightModeIconHelper::refreshIcons(m_statsPage);
     }
+    if (m_reviewPage != nullptr) {
+        m_reviewPage->setDarkMode(dark);
+        LightModeIconHelper::refreshIcons(m_reviewPage);
+    }
     if (m_storagePage != nullptr) {
         m_storagePage->setDarkMode(dark);
         LightModeIconHelper::refreshIcons(m_storagePage);
+    }
+    if (m_settingsPage != nullptr) {
+        m_settingsPage->setDarkMode(dark);
+        LightModeIconHelper::refreshIcons(m_settingsPage);
     }
     if (m_aiConfigPage != nullptr) {
         m_aiConfigPage->setDarkMode(dark);

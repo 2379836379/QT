@@ -2,6 +2,8 @@
 
 #include "network/openjudgeclient.h"
 
+#include "config/apppaths.h"
+
 #include <QCoreApplication>
 #include <QDateTime>
 #include <QDir>
@@ -12,13 +14,7 @@ namespace
 {
 void writeStartupLog(const QString &message)
 {
-    QDir dir(QCoreApplication::applicationDirPath());
-    if (dir.dirName().compare("build", Qt::CaseInsensitive) == 0) {
-        dir.cdUp();
-    }
-    dir.mkpath("data");
-
-    QFile file(dir.filePath("data/startup.log"));
+    QFile file(QDir(AppPaths::dataDir()).filePath("startup.log"));
     if (!file.open(QIODevice::Append | QIODevice::Text)) {
         return;
     }

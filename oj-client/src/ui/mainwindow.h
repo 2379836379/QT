@@ -53,6 +53,8 @@ class ProblemPage;
 class FavoritePage;
 class TaskBoardPage;
 class StatsPage;
+class ReviewPage;
+class SettingsPage;
 class StoragePage;
 class QWidget;
 class QAction;
@@ -139,6 +141,8 @@ private:
     FavoritePage *m_favoritePage = nullptr;
     TaskBoardPage *m_taskBoardPage = nullptr;
     StatsPage *m_statsPage = nullptr;
+    ReviewPage *m_reviewPage = nullptr;
+    SettingsPage *m_settingsPage = nullptr;
     StoragePage *m_storagePage = nullptr;
     QVector<int> m_navigationHistory;
     ProblemPageInfo m_currentProblemInfo;
