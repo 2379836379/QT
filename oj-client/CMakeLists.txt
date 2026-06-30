@@ -163,22 +163,21 @@ if (WIN32)
     get_target_property(QT_QMAKE_EXECUTABLE Qt6::qmake IMPORTED_LOCATION)
     get_filename_component(QT_BIN_DIR "${QT_QMAKE_EXECUTABLE}" DIRECTORY)
     find_program(WINDEPLOYQT_EXECUTABLE windeployqt HINTS "${QT_BIN_DIR}")
+    get_filename_component(CXX_COMPILER_DIR "${CMAKE_CXX_COMPILER}" DIRECTORY)
 
-    if (MINGW)
-        get_filename_component(CXX_COMPILER_DIR "${CMAKE_CXX_COMPILER}" DIRECTORY)
-
-        foreach(runtime_dll
-                libgcc_s_seh-1.dll
-                libstdc++-6.dll
-                libwinpthread-1.dll)
+    foreach(runtime_dll
+            libgcc_s_seh-1.dll
+            libstdc++-6.dll
+            libwinpthread-1.dll)
+        if(EXISTS "${CXX_COMPILER_DIR}/${runtime_dll}")
             add_custom_command(TARGET oj POST_BUILD
                 COMMAND ${CMAKE_COMMAND} -E copy_if_different
                     "${CXX_COMPILER_DIR}/${runtime_dll}"
                     "$<TARGET_FILE_DIR:oj>/${runtime_dll}"
                 COMMENT "Copying ${runtime_dll} next to oj.exe"
             )
-        endforeach()
-    endif()
+        endif()
+    endforeach()
 
     if (WINDEPLOYQT_EXECUTABLE)
         add_custom_command(TARGET oj POST_BUILD
