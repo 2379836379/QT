@@ -181,6 +181,13 @@ StatsPage::StatsPage(QWidget *parent)
         "  background: #fbfaf7;"
         "  color: #2f3a33;"
         "  min-width: 90px;"
+        "}"
+        "#statFilterCombo QAbstractItemView {"
+        "  border: 1px solid #ded8cc;"
+        "  background: #fbfaf7;"
+        "  color: #2f3a33;"
+        "  selection-background-color: #dcefea;"
+        "  selection-color: #12343b;"
         "}");
 
     connect(homeButton, &QPushButton::clicked, this, &StatsPage::homeRequested);
@@ -416,6 +423,13 @@ void StatsPage::setDarkMode(bool dark)
         "  border: 1px solid #2c3844;"
         "  background: #1b232c;"
         "  color: #e8edf2;"
+        "}"
+        "#statFilterCombo QAbstractItemView {"
+        "  border: 1px solid #2c3844;"
+        "  background: #1b232c;"
+        "  color: #e8edf2;"
+        "  selection-background-color: #234257;"
+        "  selection-color: #eff8ff;"
         "}";
 
     setStyleSheet(dark ? lightStyle + darkOverride : lightStyle);
