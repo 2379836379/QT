@@ -1,6 +1,8 @@
 #include "openjudgeclient.h"
 #include "cookiestore.h"
 
+#include "config/apppaths.h"
+
 #include <QCoreApplication>
 #include <QDateTime>
 #include <QDebug>
@@ -14,13 +16,7 @@ namespace
 {
 void writeStartupLog(const QString &message)
 {
-    QDir dir(QCoreApplication::applicationDirPath());
-    if (dir.dirName().compare("build", Qt::CaseInsensitive) == 0) {
-        dir.cdUp();
-    }
-    dir.mkpath("data");
-
-    QFile file(dir.filePath("data/startup.log"));
+    QFile file(QDir(AppPaths::dataDir()).filePath("startup.log"));
     if (!file.open(QIODevice::Append | QIODevice::Text)) {
         return;
     }
@@ -28,6 +24,15 @@ void writeStartupLog(const QString &message)
     QTextStream stream(&file);
     stream << QDateTime::currentDateTime().toString("yyyy-MM-dd HH:mm:ss.zzz")
            << " | " << message << '\n';
+}
+
+QString normalizeBaseUrl(const QString &baseUrl)
+{
+    QString result = baseUrl.trimmed();
+    while (result.endsWith('/')) {
+        result.chop(1);
+    }
+    return result;
 }
 }
 
@@ -37,7 +42,15 @@ OpenJudgeClient::OpenJudgeClient(QObject *parent)
 }
 void OpenJudgeClient::setBaseUrl(const QString &baseUrl)
 {
-    m_baseUrl = baseUrl;
+    m_baseUrl = normalizeBaseUrl(baseUrl);
+}
+
+void OpenJudgeClient::setJudgerBaseUrl(const QString &judgerBaseUrl)
+{
+    const QString normalized = normalizeBaseUrl(judgerBaseUrl);
+    if (!normalized.isEmpty()) {
+        m_judgerBaseUrl = normalized;
+    }
 }
 
 void OpenJudgeClient::setCookieStore(CookieStore *cookieStore)

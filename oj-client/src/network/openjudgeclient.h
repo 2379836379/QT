@@ -34,6 +34,7 @@ public:
     explicit OpenJudgeClient(QObject *parent = nullptr);
 
     void setBaseUrl(const QString &baseUrl);
+    void setJudgerBaseUrl(const QString &judgerBaseUrl);
     void setCookieStore(CookieStore *cookieStore);
     void logout();
 

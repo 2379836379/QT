@@ -1,5 +1,7 @@
 #include "src/ui/mainwindow.h"
 
+#include "src/config/apppaths.h"
+
 #include <QApplication>
 #include <QDateTime>
 #include <QDir>
@@ -33,10 +35,7 @@ QIcon loadAppIcon()
 
 void writeStartupLog(const QString &message)
 {
-    QDir dir = QDir::current();
-    dir.mkpath("data");
-
-    QFile file(dir.filePath("data/startup.log"));
+    QFile file(QDir(AppPaths::dataDir()).filePath("startup.log"));
     if (!file.open(QIODevice::Append | QIODevice::Text)) {
         return;
     }
@@ -52,6 +51,8 @@ int main(int argc, char *argv[])
     writeStartupLog("main: entering");
     QApplication a(argc, argv);
     writeStartupLog("main: QApplication created");
+    AppPaths::migrateLegacyDataIfNeeded();
+    writeStartupLog("main: legacy data migration checked");
     QCoreApplication::setApplicationName(" ");
     QApplication::setApplicationDisplayName(" ");
     writeStartupLog("main: application name cleared");

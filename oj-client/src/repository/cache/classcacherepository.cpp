@@ -1,5 +1,7 @@
 #include "classcacherepository.h"
 
+#include "config/apppaths.h"
+
 #include <QCoreApplication>
 #include <QDir>
 #include <QFile>
@@ -12,25 +14,9 @@
 
 namespace
 {
-QDir projectRootDir()
-{
-    QDir dir(QCoreApplication::applicationDirPath());
-    if (dir.dirName().compare("build", Qt::CaseInsensitive) == 0) {
-        dir.cdUp();
-    } else if ((dir.dirName().compare("debug", Qt::CaseInsensitive) == 0
-                || dir.dirName().compare("release", Qt::CaseInsensitive) == 0)
-               && dir.cdUp()
-               && dir.dirName().compare("build", Qt::CaseInsensitive) == 0) {
-        dir.cdUp();
-    }
-    return dir;
-}
-
 QString databasePath()
 {
-    QDir dir(projectRootDir().filePath("cache"));
-    dir.mkpath(".");
-    return dir.filePath("class_cache.db");
+    return QDir(AppPaths::cacheDir()).filePath("class_cache.db");
 }
 
 bool ensureColumn(QSqlDatabase &database,

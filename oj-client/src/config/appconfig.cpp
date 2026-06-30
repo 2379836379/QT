@@ -1,8 +1,11 @@
 #include "config/appconfig.h"
 
+#include "config/apppaths.h"
+
 #include <QCoreApplication>
 #include <QDir>
 #include <QFile>
+#include <QFileInfo>
 #include <QHash>
 #include <QRegularExpression>
 #include <QStringList>
@@ -22,44 +25,67 @@ QString unquoteTomlValue(const QString &value)
 
 QStringList candidateConfigPaths()
 {
-    const QString appDir = QCoreApplication::applicationDirPath();
-    const QString cwd = QDir::currentPath();
-    return {
-        QDir(cwd).filePath("config.toml"),
-        QDir(appDir).filePath("config.toml"),
-        QDir(appDir).filePath("../config.toml"),
-        QDir(appDir).filePath("../oj-client/config.toml"),
-        QDir(appDir).filePath("../../oj-client/config.toml")
-    };
+    return {AppPaths::configFilePath()};
 }
 
 QString configOutputPath()
 {
-    for (const QString &path : candidateConfigPaths()) {
-        if (QFile::exists(path)) {
-            return QDir::cleanPath(path);
-        }
-    }
-    return QDir(QDir::currentPath()).filePath("config.toml");
+    return AppPaths::configFilePath();
 }
 
 QString appStateOutputPath()
 {
-    const QString appDir = QCoreApplication::applicationDirPath();
-    const QString cwd = QDir::currentPath();
-    const QStringList candidates = {
-        QDir(cwd).filePath("appstate.toml"),
-        QDir(appDir).filePath("appstate.toml"),
-        QDir(appDir).filePath("../appstate.toml"),
-        QDir(appDir).filePath("../oj-client/appstate.toml"),
-        QDir(appDir).filePath("../../oj-client/appstate.toml")
-    };
-    for (const QString &path : candidates) {
-        if (QFile::exists(path)) {
-            return QDir::cleanPath(path);
+    return AppPaths::appStateFilePath();
+}
+
+QString readAppStateRootString(const QString &targetKey)
+{
+    const QString loadedPath = appStateOutputPath();
+    if (!QFile::exists(loadedPath)) {
+        return QString();
+    }
+
+    QFile file(loadedPath);
+    if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        return QString();
+    }
+
+    const QString content = QString::fromUtf8(file.readAll());
+    QString currentSection;
+    const QRegularExpression sectionRegex("^\\s*\\[([^\\]]+)\\]\\s*$");
+    const QRegularExpression keyValueRegex("^\\s*([A-Za-z0-9_\\-]+)\\s*=\\s*(.*?)\\s*$");
+
+    const QStringList lines = content.split('\n');
+    for (QString line : lines) {
+        const int commentIndex = line.indexOf('#');
+        if (commentIndex >= 0) {
+            line = line.left(commentIndex);
+        }
+        if (line.trimmed().isEmpty()) {
+            continue;
+        }
+
+        const QRegularExpressionMatch sectionMatch = sectionRegex.match(line);
+        if (sectionMatch.hasMatch()) {
+            currentSection = sectionMatch.captured(1).trimmed().toLower();
+            continue;
+        }
+
+        if (!currentSection.isEmpty()) {
+            continue;
+        }
+
+        const QRegularExpressionMatch keyValueMatch = keyValueRegex.match(line);
+        if (!keyValueMatch.hasMatch()) {
+            continue;
+        }
+
+        if (keyValueMatch.captured(1).trimmed().toLower() == targetKey.toLower()) {
+            return unquoteTomlValue(keyValueMatch.captured(2));
         }
     }
-    return QDir(QDir::currentPath()).filePath("appstate.toml");
+
+    return QString();
 }
 
 QString quoteTomlValue(QString text)
@@ -115,6 +141,40 @@ QString updateOrAppendRootKey(const QString &content,
     }
 
     return output.join('\n');
+}
+
+bool writeAppStateRootKey(const QString &key, const QString &value, QString *errorMessage)
+{
+    const QString savedPath = appStateOutputPath();
+    QDir().mkpath(QFileInfo(savedPath).absolutePath());
+
+    QString content;
+    QFile inputFile(savedPath);
+    if (inputFile.exists()) {
+        if (!inputFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
+            if (errorMessage != nullptr) {
+                *errorMessage = QString("Failed to read appstate.toml: %1")
+                                    .arg(inputFile.errorString());
+            }
+            return false;
+        }
+        content = QString::fromUtf8(inputFile.readAll());
+        inputFile.close();
+    }
+
+    const QString updatedContent = updateOrAppendRootKey(content, key, quoteTomlValue(value));
+
+    QFile outputFile(savedPath);
+    if (!outputFile.open(QIODevice::WriteOnly | QIODevice::Text | QIODevice::Truncate)) {
+        if (errorMessage != nullptr) {
+            *errorMessage = QString("Failed to write appstate.toml: %1")
+                                .arg(outputFile.errorString());
+        }
+        return false;
+    }
+    outputFile.write(updatedContent.toUtf8());
+    outputFile.close();
+    return true;
 }
 }
 
@@ -287,6 +347,24 @@ QString AppConfig::loadRingPath()
     }
 
     return QString();
+}
+
+QString AppConfig::loadJudgerBaseUrl(const QString &defaultValue)
+{
+    const QString value = readAppStateRootString("judger_base_url").trimmed();
+    return value.isEmpty() ? defaultValue : value;
+}
+
+QString AppConfig::loadEmailVerifyUrl(const QString &defaultValue)
+{
+    const QString value = readAppStateRootString("email_verify_url").trimmed();
+    return value.isEmpty() ? defaultValue : value;
+}
+
+QString AppConfig::loadOpenJudgeBaseUrl(const QString &defaultValue)
+{
+    const QString value = readAppStateRootString("openjudge_base_url").trimmed();
+    return value.isEmpty() ? defaultValue : value;
 }
 
 bool AppConfig::loadAlarmEnabled(bool defaultValue)
@@ -473,6 +551,21 @@ bool AppConfig::saveAlarmEnabled(bool enabled, QString *errorMessage)
     outputFile.write(updatedContent.toUtf8());
     outputFile.close();
     return true;
+}
+
+bool AppConfig::saveOpenJudgeBaseUrl(const QString &value, QString *errorMessage)
+{
+    return writeAppStateRootKey("openjudge_base_url", value.trimmed(), errorMessage);
+}
+
+bool AppConfig::saveJudgerBaseUrl(const QString &value, QString *errorMessage)
+{
+    return writeAppStateRootKey("judger_base_url", value.trimmed(), errorMessage);
+}
+
+bool AppConfig::saveEmailVerifyUrl(const QString &value, QString *errorMessage)
+{
+    return writeAppStateRootKey("email_verify_url", value.trimmed(), errorMessage);
 }
 
 bool AppConfig::saveConfigText(const QString &content,
