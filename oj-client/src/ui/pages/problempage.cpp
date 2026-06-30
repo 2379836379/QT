@@ -24,6 +24,7 @@
 #include <QRegularExpression>
 #include <QKeyEvent>
 #include <QShortcut>
+#include <QScrollBar>
 #include <QSignalBlocker>
 #include <QSplitter>
 #include <QStackedWidget>
@@ -1917,13 +1918,27 @@ void ProblemPage::appendAiTranscriptBlock(const QString &title, const QString &b
 
 void ProblemPage::refreshAiResponseView()
 {
-    if (m_aiResponseTextEdit != nullptr) {
-        if (m_aiTranscript.isEmpty()) {
-            m_aiResponseTextEdit->clear();
-        } else {
-            m_aiResponseTextEdit->setMarkdown(
-                renderAiTranscriptMarkdown(m_aiTranscript));
-        }
+    if (m_aiResponseTextEdit == nullptr) {
+        return;
+    }
+
+    QScrollBar *verticalBar = m_aiResponseTextEdit->verticalScrollBar();
+    QScrollBar *horizontalBar = m_aiResponseTextEdit->horizontalScrollBar();
+    const int verticalValue = verticalBar != nullptr ? verticalBar->value() : 0;
+    const int horizontalValue = horizontalBar != nullptr ? horizontalBar->value() : 0;
+
+    if (m_aiTranscript.isEmpty()) {
+        m_aiResponseTextEdit->clear();
+    } else {
+        m_aiResponseTextEdit->setMarkdown(
+            renderAiTranscriptMarkdown(m_aiTranscript));
+    }
+
+    if (verticalBar != nullptr) {
+        verticalBar->setValue(verticalValue);
+    }
+    if (horizontalBar != nullptr) {
+        horizontalBar->setValue(horizontalValue);
     }
 }
 
