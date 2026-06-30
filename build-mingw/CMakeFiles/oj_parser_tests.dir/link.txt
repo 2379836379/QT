@@ -1,0 +1,3 @@
+D:\QT\Tools\CMake_64\bin\cmake.exe -E rm -f CMakeFiles\oj_parser_tests.dir/objects.a
+D:\QT\Tools\mingw1310_64\bin\ar.exe qc CMakeFiles\oj_parser_tests.dir/objects.a @CMakeFiles\oj_parser_tests.dir\objects1.rsp
+D:\QT\Tools\mingw1310_64\bin\g++.exe -O3 -DNDEBUG -Wl,--whole-archive CMakeFiles\oj_parser_tests.dir/objects.a -Wl,--no-whole-archive -o oj_parser_tests.exe -Wl,--out-implib,liboj_parser_tests.dll.a -Wl,--major-image-version,0,--minor-image-version,0 @CMakeFiles\oj_parser_tests.dir\linkLibs.rsp

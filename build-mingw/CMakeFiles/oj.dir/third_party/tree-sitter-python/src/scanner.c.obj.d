@@ -1,0 +1,34 @@
+CMakeFiles/oj.dir/third_party/tree-sitter-python/src/scanner.c.obj: \
+ E:\csqt\oj-client\third_party\tree-sitter-python\src\scanner.c \
+ E:\csqt\oj-client\third_party\tree-sitter-python\src\tree_sitter/array.h \
+ E:/csqt/oj-client/third_party/tree-sitter-python/src/tree_sitter/alloc.h \
+ D:/QT/Tools/mingw1310_64/lib/gcc/x86_64-w64-mingw32/13.1.0/include/stdbool.h \
+ D:/QT/Tools/mingw1310_64/x86_64-w64-mingw32/include/stdio.h \
+ D:/QT/Tools/mingw1310_64/x86_64-w64-mingw32/include/corecrt_stdio_config.h \
+ D:/QT/Tools/mingw1310_64/x86_64-w64-mingw32/include/corecrt.h \
+ D:/QT/Tools/mingw1310_64/x86_64-w64-mingw32/include/_mingw.h \
+ D:/QT/Tools/mingw1310_64/x86_64-w64-mingw32/include/_mingw_mac.h \
+ D:/QT/Tools/mingw1310_64/x86_64-w64-mingw32/include/_mingw_secapi.h \
+ D:/QT/Tools/mingw1310_64/x86_64-w64-mingw32/include/vadefs.h \
+ D:/QT/Tools/mingw1310_64/x86_64-w64-mingw32/include/sdks/_mingw_ddk.h \
+ D:/QT/Tools/mingw1310_64/x86_64-w64-mingw32/include/_mingw_off_t.h \
+ D:/QT/Tools/mingw1310_64/x86_64-w64-mingw32/include/swprintf.inl \
+ D:/QT/Tools/mingw1310_64/x86_64-w64-mingw32/include/sec_api/stdio_s.h \
+ D:/QT/Tools/mingw1310_64/x86_64-w64-mingw32/include/stdlib.h \
+ D:/QT/Tools/mingw1310_64/x86_64-w64-mingw32/include/corecrt_wstdlib.h \
+ D:/QT/Tools/mingw1310_64/lib/gcc/x86_64-w64-mingw32/13.1.0/include/limits.h \
+ D:/QT/Tools/mingw1310_64/lib/gcc/x86_64-w64-mingw32/13.1.0/include/syslimits.h \
+ D:/QT/Tools/mingw1310_64/x86_64-w64-mingw32/include/limits.h \
+ D:/QT/Tools/mingw1310_64/x86_64-w64-mingw32/include/crtdefs.h \
+ D:/QT/Tools/mingw1310_64/x86_64-w64-mingw32/include/sec_api/stdlib_s.h \
+ D:/QT/Tools/mingw1310_64/x86_64-w64-mingw32/include/malloc.h \
+ D:/QT/Tools/mingw1310_64/lib/gcc/x86_64-w64-mingw32/13.1.0/include/mm_malloc.h \
+ D:/QT/Tools/mingw1310_64/x86_64-w64-mingw32/include/errno.h \
+ D:/QT/Tools/mingw1310_64/x86_64-w64-mingw32/include/assert.h \
+ D:/QT/Tools/mingw1310_64/lib/gcc/x86_64-w64-mingw32/13.1.0/include/stdint.h \
+ D:/QT/Tools/mingw1310_64/x86_64-w64-mingw32/include/stdint.h \
+ D:/QT/Tools/mingw1310_64/lib/gcc/x86_64-w64-mingw32/13.1.0/include/stddef.h \
+ D:/QT/Tools/mingw1310_64/x86_64-w64-mingw32/include/stddef.h \
+ D:/QT/Tools/mingw1310_64/x86_64-w64-mingw32/include/string.h \
+ D:/QT/Tools/mingw1310_64/x86_64-w64-mingw32/include/sec_api/string_s.h \
+ E:\csqt\oj-client\third_party\tree-sitter-python\src\tree_sitter/parser.h

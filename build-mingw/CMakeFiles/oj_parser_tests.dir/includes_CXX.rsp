@@ -1,0 +1,1 @@
+-I"E:/csqt/build-mingw/oj_parser_tests_autogen/include" -I"E:/csqt/oj-client/src" -isystem D:/QT/6.11.0/mingw_64/include/QtCore -isystem D:/QT/6.11.0/mingw_64/include -isystem "D:/QT/6.11.0/mingw_64/mkspecs/win32-g++" -isystem D:/QT/6.11.0/mingw_64/include/QtTest
