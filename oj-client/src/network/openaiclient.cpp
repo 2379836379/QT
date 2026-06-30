@@ -102,6 +102,22 @@ QUrl responsesUrl(const QUrl &baseUrl)
     return url;
 }
 
+QString buildServerErrorMessage(QNetworkReply *reply, const QByteArray &body)
+{
+    const QString rawBody = QString::fromUtf8(body).trimmed();
+    if (!rawBody.isEmpty()) {
+        return QString("Server response:\n%1").arg(rawBody);
+    }
+
+    return QString("Client-generated error:\nHTTP status: %1\nEndpoint: %2\n%3")
+        .arg(QString::number(reply->attribute(
+                 QNetworkRequest::HttpStatusCodeAttribute)
+                 .toInt()),
+             reply->url().toString(),
+             reply->errorString());
+}
+
+
 QUrl chatCompletionsUrl(const QUrl &baseUrl)
 {
     QUrl url(baseUrl);
@@ -222,28 +238,7 @@ void OpenAiClient::createResponseStream(const QString &apiKey,
                                                      QNetworkRequest::HttpStatusCodeAttribute)
                                                      .toInt())));
         if (reply->error() != QNetworkReply::NoError) {
-            QString message =
-                QString("OpenAI request failed.\nHTTP status: %1\nEndpoint: %2\n%3")
-                    .arg(QString::number(reply->attribute(
-                                             QNetworkRequest::HttpStatusCodeAttribute)
-                                             .toInt()),
-                         reply->url().toString(),
-                         reply->errorString());
-            const QJsonDocument errorDocument = QJsonDocument::fromJson(body);
-            if (errorDocument.isObject()) {
-                const QString apiMessage = errorDocument.object()
-                                               .value("error")
-                                               .toObject()
-                                               .value("message")
-                                               .toString();
-                if (!apiMessage.isEmpty()) {
-                    message += "\n" + apiMessage;
-                }
-            }
-            if (!body.trimmed().isEmpty()) {
-                message += "\n\nRaw body:\n" + QString::fromUtf8(body);
-            }
-            emit requestFailed(message);
+            emit requestFailed(buildServerErrorMessage(reply, body));
             reply->deleteLater();
             return;
         }
@@ -268,13 +263,7 @@ void OpenAiClient::createResponseStream(const QString &apiKey,
                 writeOpenAiLog("OpenAiClient::createResponseStream fallback completed from body");
                 emit responseCompleted(document.object());
             } else if (!state->sawStreamEvent) {
-                QString message =
-                    QString("OpenAI response could not be parsed.\nEndpoint: %1")
-                        .arg(reply->url().toString());
-                if (!candidateBody.isEmpty()) {
-                    message += "\n\nRaw body:\n" + QString::fromUtf8(candidateBody);
-                }
-                emit requestFailed(message);
+                emit requestFailed(buildServerErrorMessage(reply, body));
             }
         }
 
@@ -309,28 +298,7 @@ void OpenAiClient::createResponse(const QString &apiKey, const QJsonObject &payl
                                                      QNetworkRequest::HttpStatusCodeAttribute)
                                                      .toInt())));
         if (reply->error() != QNetworkReply::NoError) {
-            QString message =
-                QString("OpenAI request failed.\nHTTP status: %1\nEndpoint: %2\n%3")
-                    .arg(QString::number(reply->attribute(
-                                             QNetworkRequest::HttpStatusCodeAttribute)
-                                             .toInt()),
-                         reply->url().toString(),
-                         reply->errorString());
-            const QJsonDocument errorDocument = QJsonDocument::fromJson(body);
-            if (errorDocument.isObject()) {
-                const QString apiMessage = errorDocument.object()
-                                               .value("error")
-                                               .toObject()
-                                               .value("message")
-                                               .toString();
-                if (!apiMessage.isEmpty()) {
-                    message += "\n" + apiMessage;
-                }
-            }
-            if (!body.trimmed().isEmpty()) {
-                message += "\n\nRaw body:\n" + QString::fromUtf8(body);
-            }
-            emit requestFailed(message);
+            emit requestFailed(buildServerErrorMessage(reply, body));
             reply->deleteLater();
             return;
         }
@@ -378,17 +346,7 @@ void OpenAiClient::createChatCompletion(const QString &apiKey,
                                                      QNetworkRequest::HttpStatusCodeAttribute)
                                                      .toInt())));
         if (reply->error() != QNetworkReply::NoError) {
-            QString message =
-                QString("OpenAI request failed.\nHTTP status: %1\nEndpoint: %2\n%3")
-                    .arg(QString::number(reply->attribute(
-                                             QNetworkRequest::HttpStatusCodeAttribute)
-                                             .toInt()),
-                         reply->url().toString(),
-                         reply->errorString());
-            if (!body.trimmed().isEmpty()) {
-                message += "\n\nRaw body:\n" + QString::fromUtf8(body);
-            }
-            emit requestFailed(message);
+            emit requestFailed(buildServerErrorMessage(reply, body));
             reply->deleteLater();
             return;
         }

@@ -83,11 +83,7 @@ AiService::AiService(OpenAiClient *client, QObject *parent)
         emit thinkingChanged(false);
         writeAiLog(QString("AiService: requestFailed %1")
                        .arg(message.left(200).replace('\n', ' ')));
-        if (m_debugLog.isEmpty()) {
-            emit failed(message);
-            return;
-        }
-        emit failed(m_debugLog + "\n\n" + message);
+        emit failed(message);
     });
 }
 
