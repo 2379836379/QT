@@ -108,6 +108,8 @@ private:
     void setAiPanelVisible(bool visible);
     void setNotesPanelVisible(bool visible);
     void redistributeWorkspacePanels();
+    void constrainWindowToScreen();
+    void updateSplitterInteractivity();
     void setResultTab(bool showTestTab);
     void resetSubmitPanel();
     void updateCodeHighlightLanguage();

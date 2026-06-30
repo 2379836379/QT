@@ -901,6 +901,14 @@ ProblemPage::ProblemPage(QWidget *parent)
     m_contentSplitter->setStretchFactor(0, 1);
     m_contentSplitter->setStretchFactor(1, 1);
     m_contentSplitter->setSizes({640, 640});
+    connect(m_contentSplitter, &QSplitter::splitterMoved, this, [this](int, int) {
+        constrainWindowToScreen();
+    updateSplitterInteractivity();
+    });
+    connect(m_workspaceSplitter, &QSplitter::splitterMoved, this, [this](int, int) {
+        constrainWindowToScreen();
+    updateSplitterInteractivity();
+    });
 
     bottomLayout->addWidget(m_toolsFrame, 1);
     bottomLayout->addWidget(m_contentSplitter, 4);
@@ -1259,6 +1267,68 @@ void ProblemPage::setToolsExpanded(bool expanded)
     }
 }
 
+void ProblemPage::updateSplitterInteractivity()
+{
+    const bool allowProblemSubmitResize = !m_aiPanelVisible && !m_notesPanelVisible;
+
+    if (m_contentSplitter != nullptr) {
+        for (int i = 1; i < m_contentSplitter->count(); ++i) {
+            if (QSplitterHandle *handle = m_contentSplitter->handle(i)) {
+                handle->setEnabled(allowProblemSubmitResize);
+            }
+        }
+    }
+
+    if (m_workspaceSplitter != nullptr) {
+        for (int i = 1; i < m_workspaceSplitter->count(); ++i) {
+            if (QSplitterHandle *handle = m_workspaceSplitter->handle(i)) {
+                handle->setEnabled(false);
+            }
+        }
+    }
+}
+void ProblemPage::constrainWindowToScreen()
+{
+    QWidget *topLevel = window();
+    if (topLevel == nullptr) {
+        return;
+    }
+
+    QScreen *screen = topLevel->screen();
+    if (screen == nullptr) {
+        screen = QGuiApplication::screenAt(topLevel->frameGeometry().center());
+    }
+    if (screen == nullptr) {
+        return;
+    }
+
+    const QRect available = screen->availableGeometry();
+    QSize size = topLevel->size();
+    size.setWidth(qMin(size.width(), available.width()));
+    size.setHeight(qMin(size.height(), available.height()));
+    if (size != topLevel->size()) {
+        topLevel->resize(size);
+    }
+
+    QRect geometry = topLevel->frameGeometry();
+    int x = geometry.x();
+    int y = geometry.y();
+    if (geometry.right() > available.right()) {
+        x -= geometry.right() - available.right();
+    }
+    if (geometry.bottom() > available.bottom()) {
+        y -= geometry.bottom() - available.bottom();
+    }
+    if (x < available.left()) {
+        x = available.left();
+    }
+    if (y < available.top()) {
+        y = available.top();
+    }
+    if (x != geometry.x() || y != geometry.y()) {
+        topLevel->move(x, y);
+    }
+}
 void ProblemPage::redistributeWorkspacePanels()
 {
     if (m_contentSplitter == nullptr || m_contentSplitter->count() < 2
@@ -1296,6 +1366,8 @@ void ProblemPage::redistributeWorkspacePanels()
         sizes[0] = paneWidth + remainder;
     }
     m_workspaceSplitter->setSizes(sizes);
+    constrainWindowToScreen();
+    updateSplitterInteractivity();
 }
 void ProblemPage::setAiPanelVisible(bool visible)
 {
