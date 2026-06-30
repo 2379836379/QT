@@ -384,6 +384,11 @@ MainWindow::MainWindow(QWidget *parent)
     writeStartupLog("MainWindow: constructor begin");
     ui->setupUi(this);
     writeStartupLog("MainWindow: ui setup complete");
+    setMinimumSize(0, 0);
+    ui->centralwidget->setMinimumSize(0, 0);
+    ui->pageStack->setMinimumSize(0, 0);
+    ui->centralwidget->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Ignored);
+    ui->pageStack->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Ignored);
     setWindowTitle(QStringLiteral(" "));
     setWindowFilePath(QString());
     writeStartupLog("MainWindow: window title cleared");

@@ -31,6 +31,8 @@ class ProblemPage : public QWidget
 public:
     explicit ProblemPage(QWidget *parent = nullptr);
     void setDarkMode(bool dark);
+    QSize minimumSizeHint() const override;
+    QSize sizeHint() const override;
 
     void openProblem(const QString &problemTitle = QString());
     void showProblemLoadedFromFavorites(const ProblemPageInfo &problemPageInfo);
@@ -105,6 +107,7 @@ private:
     void setToolsExpanded(bool expanded);
     void setAiPanelVisible(bool visible);
     void setNotesPanelVisible(bool visible);
+    void redistributeWorkspacePanels();
     void setResultTab(bool showTestTab);
     void resetSubmitPanel();
     void updateCodeHighlightLanguage();
@@ -149,6 +152,7 @@ private:
     QPushButton *m_loadSampleButton = nullptr;
     QPushButton *m_testTabButton = nullptr;
     QPushButton *m_submitTabButton = nullptr;
+    QSplitter *m_contentSplitter = nullptr;
     QSplitter *m_workspaceSplitter = nullptr;
     QSplitter *m_submitPaneSplitter = nullptr;
     QStackedWidget *m_resultStack = nullptr;
