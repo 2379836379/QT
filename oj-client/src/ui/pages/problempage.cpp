@@ -788,15 +788,15 @@ ProblemPage::ProblemPage(QWidget *parent)
         QString prompt;
     };
     const QList<AiPreset> aiPresets = {
-        {"解释题意", "请用简洁中文解释这道题的题意、输入输出格式和样例含义。"},
-        {"写暴力解", "请基于当前题目给出一个朴素的暴力解法，并简要说明思路与复杂度。"},
-        {"优化复杂度", "请分析当前代码的时间和空间复杂度，并给出更优的算法思路或实现。"}};
+        {QString::fromUtf8("\xE8\xA7\xA3\xE9\x87\x8A\xE9\xA2\x98\xE6\x84\x8F"), QString::fromUtf8("\xE8\xAF\xB7\xE7\x94\xA8\xE7\xAE\x80\xE6\xB4\x81\xE4\xB8\xAD\xE6\x96\x87\xE8\xA7\xA3\xE9\x87\x8A\xE8\xBF\x99\xE9\x81\x93\xE9\xA2\x98\xE7\x9A\x84\xE9\xA2\x98\xE6\x84\x8F\xE3\x80\x81\xE8\xBE\x93\xE5\x85\xA5\xE8\xBE\x93\xE5\x87\xBA\xE6\xA0\xBC\xE5\xBC\x8F\xE5\x92\x8C\xE6\xA0\xB7\xE4\xBE\x8B\xE5\x90\xAB\xE4\xB9\x89\xE3\x80\x82")},
+        {QString::fromUtf8("\xE5\x86\x99\xE6\x9A\xB4\xE5\x8A\x9B\xE8\xA7\xA3"), QString::fromUtf8("\xE8\xAF\xB7\xE5\x9F\xBA\xE4\xBA\x8E\xE5\xBD\x93\xE5\x89\x8D\xE9\xA2\x98\xE7\x9B\xAE\xE7\xBB\x99\xE5\x87\xBA\xE4\xB8\x80\xE4\xB8\xAA\xE6\x9C\xB4\xE7\xB4\xA0\xE7\x9A\x84\xE6\x9A\xB4\xE5\x8A\x9B\xE8\xA7\xA3\xE6\xB3\x95\xEF\xBC\x8C\xE5\xB9\xB6\xE7\xAE\x80\xE8\xA6\x81\xE8\xAF\xB4\xE6\x98\x8E\xE6\x80\x9D\xE8\xB7\xAF\xE4\xB8\x8E\xE5\xA4\x8D\xE6\x9D\x82\xE5\xBA\xA6\xE3\x80\x82")},
+        {QString::fromUtf8("\xE4\xBC\x98\xE5\x8C\x96\xE5\xA4\x8D\xE6\x9D\x82\xE5\xBA\xA6"), QString::fromUtf8("\xE8\xAF\xB7\xE5\x88\x86\xE6\x9E\x90\xE5\xBD\x93\xE5\x89\x8D\xE4\xBB\xA3\xE7\xA0\x81\xE7\x9A\x84\xE6\x97\xB6\xE9\x97\xB4\xE5\x92\x8C\xE7\xA9\xBA\xE9\x97\xB4\xE5\xA4\x8D\xE6\x9D\x82\xE5\xBA\xA6\xEF\xBC\x8C\xE5\xB9\xB6\xE7\xBB\x99\xE5\x87\xBA\xE6\x9B\xB4\xE4\xBC\x98\xE7\x9A\x84\xE7\xAE\x97\xE6\xB3\x95\xE6\x80\x9D\xE8\xB7\xAF\xE6\x88\x96\xE5\xAE\x9E\xE7\x8E\xB0\xE3\x80\x82")}};
     for (int i = 0; i < aiPresets.size(); ++i) {
         const AiPreset &preset = aiPresets.at(i);
         auto *presetButton = new QPushButton(preset.label, m_aiFrame);
         presetButton->setObjectName("problemRefreshButton");
         presetButton->setSizePolicy(QSizePolicy::MinimumExpanding, QSizePolicy::Fixed);
-        presetButton->setToolTip("灏嗛璁炬彁绀哄～鍏ヤ笅鏂硅緭鍏ユ");
+        presetButton->setToolTip(QString::fromUtf8("\xE5\xB0\x86\xE9\xA2\x84\xE8\xAE\xBE\xE6\x8F\x90\xE7\xA4\xBA\xE5\xA1\xAB\xE5\x85\xA5\xE4\xB8\x8B\xE6\x96\xB9\xE8\xBE\x93\xE5\x85\xA5\xE6\xA1\x86"));
         const QString promptText = preset.prompt;
         connect(presetButton, &QPushButton::clicked, this, [this, promptText]() {
             if (m_aiPromptEdit != nullptr) {
@@ -834,10 +834,10 @@ ProblemPage::ProblemPage(QWidget *parent)
     m_taskStatusCombo->setObjectName("problemLanguageCombo");
     m_taskStatusCombo->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
     m_taskStatusCombo->setMinimumContentsLength(1);
-    m_taskStatusCombo->addItem("未开始", "todo");
-    m_taskStatusCombo->addItem("进行中", "doing");
-    m_taskStatusCombo->addItem("已完成", "done");
-    m_taskStatusCombo->addItem("待重做", "redo");
+    m_taskStatusCombo->addItem(QString::fromUtf8("\xE6\x9C\xAA\xE5\xBC\x80\xE5\xA7\x8B"), "todo");
+    m_taskStatusCombo->addItem(QString::fromUtf8("\xE8\xBF\x9B\xE8\xA1\x8C\xE4\xB8\xAD"), "doing");
+    m_taskStatusCombo->addItem(QString::fromUtf8("\xE5\xB7\xB2\xE5\xAE\x8C\xE6\x88\x90"), "done");
+    m_taskStatusCombo->addItem(QString::fromUtf8("\xE5\xBE\x85\xE9\x87\x8D\xE5\x81\x9A"), "redo");
 
     auto *difficultyFieldLabel = new QLabel("Difficulty", m_notesFrame);
     difficultyFieldLabel->setObjectName("problemAiFieldLabel");
@@ -845,7 +845,7 @@ ProblemPage::ProblemPage(QWidget *parent)
     m_difficultyCombo->setObjectName("problemLanguageCombo");
     m_difficultyCombo->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
     m_difficultyCombo->setMinimumContentsLength(1);
-    m_difficultyCombo->addItem("未设置", 0);
+    m_difficultyCombo->addItem(QString::fromUtf8("\xE6\x9C\xAA\xE8\xAE\xBE\xE7\xBD\xAE"), 0);
     for (int level = 1; level <= 5; ++level) {
         m_difficultyCombo->addItem(QString::number(level), level);
     }
@@ -856,7 +856,7 @@ ProblemPage::ProblemPage(QWidget *parent)
     m_tagsEdit->setObjectName("problemLanguageCombo");
     m_tagsEdit->setPlaceholderText("dp, binary search, ...");
 
-    m_reviewCheck = new QCheckBox("加入错题本", m_notesFrame);
+    m_reviewCheck = new QCheckBox(QString::fromUtf8("\xE5\x8A\xA0\xE5\x85\xA5\xE9\x94\x99\xE9\xA2\x98\xE6\x9C\xAC"), m_notesFrame);
     m_reviewCheck->setObjectName("problemAiFieldLabel");
 
     auto *noteFieldLabel = new QLabel("Note", m_notesFrame);
